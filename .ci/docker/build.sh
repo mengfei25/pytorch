@@ -71,6 +71,8 @@ if [[ "$image" == *cuda* && "$UBUNTU_VERSION" != "22.04" ]]; then
   DOCKERFILE="${OS}-cuda/Dockerfile"
 elif [[ "$image" == *rocm* ]]; then
   DOCKERFILE="${OS}-rocm/Dockerfile"
+elif [[ "$image" == *xpu* ]]; then
+  DOCKERFILE="${OS}-xpu/Dockerfile"
 elif [[ "$image" == *cuda*linter* ]]; then
   # Use a separate Dockerfile for linter to keep a small image size
   DOCKERFILE="linter-cuda/Dockerfile"
@@ -271,6 +273,14 @@ case "$image" in
     CLANG_VERSION=12
     CONDA_CMAKE=yes
     EXECUTORCH=yes
+    ;;
+  pytorch-linux-jammy-xpu-py3-gcc11)
+    ANACONDA_PYTHON_VERSION=3.10
+    GCC_VERSION=11
+    PROTOBUF=yes
+    DB=yes
+    VISION=yes
+    CONDA_CMAKE=yes
     ;;
   pytorch-linux-focal-linter)
     # TODO: Use 3.9 here because of this issue https://github.com/python/mypy/issues/13627.
