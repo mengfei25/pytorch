@@ -12,7 +12,7 @@ cmake ../llvm -DCMAKE_INSTALL_PREFIX=/opt/llvm \
     -DCMAKE_BUILD_TYPE=Release -DLLVM_TARGETS_TO_BUILD=X86 \
     -DLLVM_INCLUDE_TESTS=OFF -DLLVM_INCLUDE_EXAMPLES=OFF \
     -DLLVM_ENABLE_TERMINFO=OFF -DCMAKE_CXX_FLAGS="-D_GLIBCXX_USE_CXX11_ABI=1"
-make -j $(nproc); make install
+make -j6; make install
 
 # Link the llvm  to the /usr/bin folder.
 sudo ln -s /opt/llvm/bin/llvm-config /usr/bin/llvm-config-13

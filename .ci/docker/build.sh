@@ -274,9 +274,9 @@ case "$image" in
     CONDA_CMAKE=yes
     EXECUTORCH=yes
     ;;
-  pytorch-linux-jammy-xpu-py3-gcc11)
+  pytorch-linux-jammy-xpu-py3-gcc12)
     ANACONDA_PYTHON_VERSION=3.10
-    GCC_VERSION=11
+    GCC_VERSION=12
     PROTOBUF=yes
     DB=yes
     VISION=yes
