@@ -50,6 +50,8 @@ if [[ "$image" == *-focal* ]]; then
   UBUNTU_VERSION=20.04
 elif [[ "$image" == *-jammy* ]]; then
   UBUNTU_VERSION=22.04
+elif [[ "$image" == *-centos9* ]]; then
+  CENTOS_VERSION=stream9
 elif [[ "$image" == *ubuntu* ]]; then
   extract_version_from_image_name ubuntu UBUNTU_VERSION
 elif [[ "$image" == *centos* ]]; then
@@ -230,7 +232,16 @@ case "$image" in
     NINJA_VERSION=1.9.0
     CONDA_CMAKE=yes
     ;;
-    pytorch-linux-jammy-py3.8-gcc11-inductor-benchmarks)
+  pytorch-linux-centos9-xpu-2024.0-py3-devtoolset11)
+    ANACONDA_PYTHON_VERSION=3.8
+    PROTOBUF=yes
+    DB=yes
+    VISION=yes
+    BASEKIT_VERSION=2024.0.0-49522
+    NINJA_VERSION=1.9.0
+    CONDA_CMAKE=yes
+    ;;
+  pytorch-linux-jammy-py3.8-gcc11-inductor-benchmarks)
     ANACONDA_PYTHON_VERSION=3.8
     GCC_VERSION=11
     PROTOBUF=yes

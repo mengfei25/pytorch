@@ -55,10 +55,9 @@ function install_ubuntu() {
 function install_centos() {
     dnf install -y 'dnf-command(config-manager)'
     dnf config-manager --add-repo \
-        https://repositories.intel.com/gpu/rhel/8.6/production/2328/unified/intel-gpu-8.6.repo
+        https://repositories.intel.com/gpu/rhel/9.0/production/2328/unified/intel-gpu-9.0.repo
     # To add the EPEL repository needed for DKMS
-    dnf -y install https://dl.fedoraproject.org/pub/epel/epel-release-latest-8.noarch.rpm
-        # https://dl.fedoraproject.org/pub/epel/epel-release-latest-9.noarch.rpm
+    dnf install -y epel-release
 
     # Create the YUM repository file in the /temp directory as a normal user
     tee > /tmp/oneAPI.repo << EOF
@@ -89,7 +88,11 @@ EOF
         intel-igc-opencl-devel level-zero-devel intel-gsc-devel libmetee-devel \
         level-zero-devel
     # Install Intel® oneAPI Base Toolkit
-    dnf install intel-basekit -y
+    if [ -n "$BASEKIT_VERSION" ]; then
+        dnf install intel-basekit=$BASEKIT_VERSION -y
+    else
+        dnf install intel-basekit -y
+    fi
 
     # Cleanup
     dnf clean all
