@@ -207,7 +207,6 @@ jobs:
           #   ${{ github.repository }}/${{ github.run_id }}/${{ github.run_attempt }}/artifact
           name: build_sccache-stats.zip
           retention-days: 14
-          retention-days: 365
           if-no-files-found: warn
           path: sccache-stats-*.json
 
