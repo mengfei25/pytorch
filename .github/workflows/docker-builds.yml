@@ -10,8 +10,6 @@ on:
   push:
     branches:
       - main
-      - release/*
-      - landchecks/*
     paths:
       - .ci/docker/**
       - .github/workflows/docker-builds.yml
@@ -93,6 +91,6 @@ jobs:
         uses: ./.github/actions/chown-workspace
         if: always()
 
-      - name: Teardown Linux
-        uses: pytorch/test-infra/.github/actions/teardown-linux@main
-        if: always()
+      # - name: Teardown Linux
+      #   uses: pytorch/test-infra/.github/actions/teardown-linux@main
+      #   if: always()

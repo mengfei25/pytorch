@@ -2,6 +2,8 @@ name: xpu
 
 on:
   push:
+    branches:
+      - enable_xpu_test
     tags:
       - ciflow/xpu/*
   workflow_dispatch:
