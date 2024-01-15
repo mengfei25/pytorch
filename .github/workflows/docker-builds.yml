@@ -9,7 +9,7 @@ on:
       - .lintrunner.toml
   push:
     branches:
-      - main
+      - enable_xpu_test
     paths:
       - .ci/docker/**
       - .github/workflows/docker-builds.yml
@@ -94,3 +94,26 @@ jobs:
       # - name: Teardown Linux
       #   uses: pytorch/test-infra/.github/actions/teardown-linux@main
       #   if: always()
+  linux-jammy-xpu-py3_8-build:
+    name: linux-jammy-xpu-py3.8
+    uses: ./.github/workflows/_linux-build.yml
+    with:
+      build-environment: linux-jammy-xpu-py3.8
+      docker-image-name: pytorch-linux-jammy-xpu-2024.0-py3
+      runner: linux.idc.xpu
+      test-matrix: |
+        { include: [
+          { config: "default", shard: 1, num_shards: 4, runner: "linux.idc.xpu" },
+          { config: "default", shard: 2, num_shards: 4, runner: "linux.idc.xpu" },
+          { config: "default", shard: 3, num_shards: 4, runner: "linux.idc.xpu" },
+          { config: "default", shard: 4, num_shards: 4, runner: "linux.idc.xpu" },
+        ]}
+
+  linux-jammy-xpu-py3_8-test:
+    name: linux-jammy-xpu-py3.8
+    uses: ./.github/workflows/_xpu-test.yml
+    needs: linux-jammy-xpu-py3_8-build
+    with:
+      build-environment: linux-jammy-xpu-py3.8
+      docker-image: ${{ needs.linux-jammy-xpu-py3_8-build.outputs.docker-image }}
+      test-matrix: ${{ needs.linux-jammy-xpu-py3_8-build.outputs.test-matrix }}
