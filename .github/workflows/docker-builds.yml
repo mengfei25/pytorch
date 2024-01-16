@@ -59,7 +59,7 @@ jobs:
         with:
           docker-image-name: ${{ matrix.docker-image-name }}
           always-rebuild: true
-          push: true
+          push: false
 
       - name: Pull docker image
         uses: pytorch/test-infra/.github/actions/pull-docker-image@main
