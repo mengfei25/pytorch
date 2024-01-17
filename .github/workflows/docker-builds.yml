@@ -31,6 +31,6 @@ jobs:
     uses: ./.github/workflows/_xpu-test.yml
     needs: linux-jammy-xpu-py3_8-build
     with:
-      build-environment: linux-jammy-xpu-py3.8
+      build-environment: pytorch-linux-jammy-py3.8-gcc11
       docker-image: ${{ needs.linux-jammy-xpu-py3_8-build.outputs.docker-image }}
       test-matrix: ${{ needs.linux-jammy-xpu-py3_8-build.outputs.test-matrix }}

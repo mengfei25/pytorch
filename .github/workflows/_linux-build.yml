@@ -201,7 +201,8 @@ jobs:
 
       - name: Upload sccache stats
         if: steps.build.outcome != 'skipped'
-        uses: seemethere/upload-artifact-s3@v5
+        # uses: seemethere/upload-artifact-s3@v5
+        uses: actions/upload-artifact@v3
         with:
           # s3-prefix: |
           #   ${{ github.repository }}/${{ github.run_id }}/${{ github.run_attempt }}/artifact

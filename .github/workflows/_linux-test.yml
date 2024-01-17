@@ -31,7 +31,7 @@ on:
       use-gha:
         required: false
         type: string
-        default: ""
+        default: "true"
         description: If set to any value, upload to GHA. Otherwise upload to S3.
       dashboard-tag:
         required: false
