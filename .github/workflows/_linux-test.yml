@@ -116,6 +116,7 @@ jobs:
         uses: ./.github/actions/download-build-artifacts
         with:
           name: ${{ inputs.build-environment }}
+          use-gha: true
 
       - name: Parse ref
         id: parse-ref
