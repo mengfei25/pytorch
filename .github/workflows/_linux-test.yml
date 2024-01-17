@@ -71,11 +71,11 @@ jobs:
       - name: Setup Linux
         uses: ./.github/actions/setup-linux
 
-      - name: Calculate docker image
-        id: calculate-docker-image
-        uses: pytorch/test-infra/.github/actions/calculate-docker-image@main
-        with:
-          docker-image-name: ${{ inputs.docker-image }}
+      # - name: Calculate docker image
+      #   id: calculate-docker-image
+      #   uses: pytorch/test-infra/.github/actions/calculate-docker-image@main
+      #   with:
+      #     docker-image-name: ${{ inputs.docker-image }}
 
       - name: Use following to pull public copy of the image
         id: print-ghcr-mirror
@@ -86,29 +86,29 @@ jobs:
           tag=${ECR_DOCKER_IMAGE##*/}
           echo "docker pull ghcr.io/pytorch/ci-image:${tag/:/-}"
 
-      - name: Pull docker image
-        uses: pytorch/test-infra/.github/actions/pull-docker-image@main
-        with:
-          docker-image: ${{ steps.calculate-docker-image.outputs.docker-image }}
+      # - name: Pull docker image
+      #   uses: pytorch/test-infra/.github/actions/pull-docker-image@main
+      #   with:
+      #     docker-image: ${{ steps.calculate-docker-image.outputs.docker-image }}
 
-      - name: Install nvidia driver, nvidia-docker runtime, set GPU_FLAG
-        id: install-nvidia-driver
-        uses: pytorch/test-infra/.github/actions/setup-nvidia@main
-        if: contains(inputs.build-environment, 'cuda') && !contains(matrix.config, 'nogpu')
+      # - name: Install nvidia driver, nvidia-docker runtime, set GPU_FLAG
+      #   id: install-nvidia-driver
+      #   uses: pytorch/test-infra/.github/actions/setup-nvidia@main
+      #   if: contains(inputs.build-environment, 'cuda') && !contains(matrix.config, 'nogpu')
 
-      - name: Lock NVIDIA A100 40GB Frequency
-        run: |
-          sudo nvidia-smi -pm 1
-          sudo nvidia-smi -ac 1215,1410
-          nvidia-smi
-        if: contains(matrix.runner, 'a100')
+      # - name: Lock NVIDIA A100 40GB Frequency
+      #   run: |
+      #     sudo nvidia-smi -pm 1
+      #     sudo nvidia-smi -ac 1215,1410
+      #     nvidia-smi
+      #   if: contains(matrix.runner, 'a100')
 
       - name: Start monitoring script
         id: monitor-script
         shell: bash
         continue-on-error: true
         run: |
-          python3 -m pip install psutil==5.9.1 nvidia-ml-py==11.525.84
+          python3 -m pip install psutil==5.9.1 
           python3 -m tools.stats.monitor > usage_log.txt 2>&1 &
           echo "monitor-script-pid=${!}" >> "${GITHUB_OUTPUT}"
 

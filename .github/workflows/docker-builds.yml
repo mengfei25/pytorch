@@ -28,7 +28,7 @@ jobs:
 
   linux-jammy-xpu-py3_8-test:
     name: linux-jammy-xpu-py3.8
-    uses: ./.github/workflows/_xpu-test.yml
+    uses: ./.github/workflows/_linux-test.yml
     # needs: linux-jammy-xpu-py3_8-build
     permissions:
       id-token: write
