@@ -7,6 +7,7 @@
 set -ex
 
 echo "Environment variables:"
+BUILD_ENVIRONMENT="pytorch-linux-jammy-py3.8-gcc11"
 env
 
 TORCH_INSTALL_DIR=$(python -c "import site; print(site.getsitepackages()[0])")/torch
