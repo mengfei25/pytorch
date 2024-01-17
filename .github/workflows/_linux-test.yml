@@ -241,7 +241,7 @@ jobs:
             --user jenkins \
             -v "${GITHUB_WORKSPACE}:/var/lib/jenkins/workspace" \
             -w /var/lib/jenkins/workspace \
-            "${DOCKER_IMAGE}"
+            308535385114.dkr.ecr.us-east-1.amazonaws.com/pytorch/pytorch-linux-jammy-xpu-2024.0-py3:aa8de031fb155691273a70d65d3164897a593f0f
           )
           # Propagate download.pytorch.org IP to container
           grep download.pytorch.org /etc/hosts | docker exec -i "${container_name}" sudo bash -c "/bin/cat >> /etc/hosts"
