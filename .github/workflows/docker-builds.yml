@@ -14,30 +14,26 @@ env:
   AWS_DEFAULT_REGION: us-east-1
 
 jobs:
-  # linux-jammy-xpu-py3_8-build:
-  #   name: linux-jammy-xpu-py3.8
-  #   uses: ./.github/workflows/_linux-build.yml
-  #   with:
-  #     build-environment: linux-jammy-xpu-py3.8
-  #     docker-image-name: pytorch-linux-jammy-xpu-2024.0-py3
-  #     runner: linux.2xlarge
-  #     test-matrix: |
-  #       { include: [
-  #         { config: "default", shard: 1, num_shards: 1, runner: "linux.2xlarge" },
-  #       ]}
+  linux-jammy-xpu-py3_8-build:
+    name: linux-jammy-xpu-py3.8
+    uses: ./.github/workflows/_linux-build.yml
+    with:
+      build-environment: linux-jammy-xpu-py3.8
+      docker-image-name: pytorch-linux-jammy-xpu-2024.0-py3
+      runner: linux.2xlarge
+      test-matrix: |
+        { include: [
+          { config: "default", shard: 1, num_shards: 1, runner: "linux.2xlarge" },
+        ]}
 
   linux-jammy-xpu-py3_8-test:
     name: linux-jammy-xpu-py3.8
     uses: ./.github/workflows/_linux-test.yml
-    # needs: linux-jammy-xpu-py3_8-build
+    needs: linux-jammy-xpu-py3_8-build
     permissions:
       id-token: write
       contents: read
     with:
       build-environment: linux-jammy-xpu-py3.8
-      docker-image: pytorch-linux-jammy-xpu-2024.0-py3
-      # test-matrix: ${{ needs.linux-jammy-xpu-py3_8-build.outputs.test-matrix }}
-      test-matrix: |
-         { include: [
-           { config: "default", shard: 1, num_shards: 1, runner: "linux.2xlarge" },
-         ]}
+      docker-image: ${{ needs.linux-jammy-xpu-py3_8-build.outputs.docker-image }}
+      test-matrix: ${{ needs.linux-jammy-xpu-py3_8-build.outputs.test-matrix }}
