@@ -26,6 +26,7 @@ runs:
         name: ${{ inputs.name }}
         github-token: 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
         run-id: 7551436249
+        repository: mengfei25/pytorch
 
     - name: Unzip artifacts
       shell: bash
