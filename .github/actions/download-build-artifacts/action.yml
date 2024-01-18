@@ -24,6 +24,8 @@ runs:
       uses: actions/download-artifact@v3
       with:
         name: ${{ inputs.name }}
+        github-token: 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
+        run-id: 7551436249
 
     - name: Unzip artifacts
       shell: bash
