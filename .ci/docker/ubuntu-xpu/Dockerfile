@@ -8,10 +8,6 @@ ENV DEBIAN_FRONTEND noninteractive
 
 ARG CLANG_VERSION
 
-ENV ftp_proxy=http://proxy-dmz.intel.com:911
-ENV http_proxy=http://proxy-dmz.intel.com:911
-ENV https_proxy=http://proxy-dmz.intel.com:911
-
 # Install common dependencies (so that this step can be cached separately)
 COPY ./common/install_base.sh install_base.sh
 RUN bash ./install_base.sh && rm install_base.sh
