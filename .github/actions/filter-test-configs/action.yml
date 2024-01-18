@@ -47,7 +47,7 @@ runs:
         command: |
           set -eux
           # PyYAML 6.0 doesn't work with MacOS x86 anymore
-          /opt/conda/envs/py_3.8/bin/python3 -m pip install requests==2.26.0 pyyaml==6.0.1
+          python3 -m pip install requests==2.26.0 pyyaml==6.0.1
 
     - name: Parse ref
       id: parse-ref
@@ -57,7 +57,7 @@ runs:
 
         # Use relative path here as this could be checked out anywhere, not necessarily
         # in runner workspace
-        /opt/conda/envs/py_3.8/bin/python3 "${GITHUB_ACTION_PATH}/../../scripts/parse_ref.py"
+        python3 "${GITHUB_ACTION_PATH}/../../scripts/parse_ref.py"
 
     - name: Get the job name
       id: get-job-name
@@ -110,7 +110,7 @@ runs:
 
         # Use relative path here as this could be checked out anywhere, not necessarily
         # in runner workspace
-        /opt/conda/envs/py_3.8/bin/python3 "${GITHUB_ACTION_PATH}/../../scripts/filter_test_configs.py" \
+        python3 "${GITHUB_ACTION_PATH}/../../scripts/filter_test_configs.py" \
           --workflow "${GITHUB_WORKFLOW}" \
           --job-name "${JOB_NAME}" \
           --test-matrix "${{ inputs.test-matrix }}" \
