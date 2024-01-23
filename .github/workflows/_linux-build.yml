@@ -65,7 +65,7 @@ on:
 jobs:
   build:
     # Don't run on forked repos
-    if: github.repository_owner == 'pytorch'
+    if: github.repository_owner == 'mengfei25'
     runs-on: ${{ inputs.runner }}
     timeout-minutes: 240
     outputs:
@@ -190,7 +190,8 @@ jobs:
           zip -1 -r artifacts.zip dist/ build/custom_test_artifacts build/lib build/bin .additional_ci_files
 
       - name: Store PyTorch Build Artifacts on S3
-        uses: seemethere/upload-artifact-s3@v5
+        # uses: seemethere/upload-artifact-s3@v5
+        uses: actions/upload-artifact@v3
         if: inputs.build-generates-artifacts && steps.build.outcome != 'skipped'
         with:
           name: ${{ inputs.build-environment }}
@@ -200,14 +201,15 @@ jobs:
 
       - name: Upload sccache stats
         if: steps.build.outcome != 'skipped'
-        uses: seemethere/upload-artifact-s3@v5
+        # uses: seemethere/upload-artifact-s3@v5
+        uses: actions/upload-artifact@v3
         with:
-          s3-prefix: |
-            ${{ github.repository }}/${{ github.run_id }}/${{ github.run_attempt }}/artifact
+          # s3-prefix: |
+          #   ${{ github.repository }}/${{ github.run_id }}/${{ github.run_attempt }}/artifact
           retention-days: 365
           if-no-files-found: warn
           path: sccache-stats-*.json
 
-      - name: Teardown Linux
-        uses: pytorch/test-infra/.github/actions/teardown-linux@main
-        if: always()
+      # - name: Teardown Linux
+      #   uses: pytorch/test-infra/.github/actions/teardown-linux@main
+      #   if: always()
