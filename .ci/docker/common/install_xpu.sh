@@ -41,11 +41,18 @@ function install_ubuntu() {
     # Development Packages
     apt-get install -y libigc-dev intel-igc-cm libigdfcl-dev libigfxcmrt-dev level-zero-dev
     # Install Intel® oneAPI Base Toolkit
-    if [ -n "$BASEKIT_VERSION" ]; then
-        apt-get install intel-basekit=$BASEKIT_VERSION -y
-    else
-        apt-get install intel-basekit -y
-    fi
+    # if [ -n "$BASEKIT_VERSION" ]; then
+    #     apt-get install intel-basekit=$BASEKIT_VERSION -y
+    # else
+    #     apt-get install intel-basekit -y
+    # fi
+    BASEKIT_URL=https://registrationcenter-download.intel.com/akdlm/IRC_NAS/20f4e6a1-6b0b-4752-b8c1-e5eacba10e01/l_BaseKit_p_2024.0.0.49564_offline.sh
+    BASEKIT_ROOT=/opt
+    wget ${BASEKIT_URL} -P ${BASEKIT_ROOT} && \
+    chmod +x ${BASEKIT_ROOT}/l_BaseKit_*.sh && \
+    cd ${BASEKIT_ROOT} && mkdir -p ${BASEKIT_ROOT}/intel/oneapi && \
+    sh ./l_BaseKit_*.sh -a --cli --silent --eula accept --install-dir ${BASEKIT_ROOT}/intel/oneapi && \
+    rm -rf ${BASEKIT_ROOT}/l_BaseKit_*.sh
 
     # Cleanup
     apt-get autoclean && apt-get clean
