@@ -65,7 +65,7 @@ on:
 jobs:
   build:
     # Don't run on forked repos
-    if: github.repository_owner == 'mengfei25' && 1 == 0
+    if: github.repository_owner == 'mengfei25'
     runs-on: ${{ inputs.runner }}
     timeout-minutes: 240
     outputs:
