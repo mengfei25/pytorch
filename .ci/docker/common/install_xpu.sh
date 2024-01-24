@@ -13,9 +13,13 @@ set -xe
 function install_ubuntu() {
     apt-get update -y
     apt-get install -y gpg-agent wget
+    apt-get -y --fix-broken install
 
-    DRIVER_DIR=${HOME}/driver/${driver_version}
-
+    DRIVER_URL=http://mlpc.intel.com/downloads/gpu-new/validation/IPEX/driver/hotfix_agama-ci-devel-775.20/
+    DRIVER_ROOT=/opt/
+    cd ${DRIVER_ROOT} && mkdir -p ${DRIVER_ROOT}/driver
+    wget -r -np --no-proxy ${DRIVER_URL} -P ${DRIVER_ROOT}/driver
+    DRIVER_DIR=${DRIVER_ROOT}/driver/mlpc.intel.com/downloads/gpu-new/validation/IPEX/driver/hotfix_agama-ci-devel-775.20/
     # install driver
     if [ ! -z ${DRIVER_DIR} ]; then
         if [ -d ${DRIVER_DIR} ]; then
@@ -32,11 +36,12 @@ function install_ubuntu() {
             done < <(ls -1 ${DRIVER_DIR})
         fi
     fi
+    rm -rf ${DRIVER_ROOT}/driver
 
     # install basekit
-    
+    BASEKIT_URL=http://mlpc.intel.com/downloads/gpu-new/validation/IPEX/basekit/l_BaseKit_p_2024.1.0.226_offline.sh
     BASEKIT_ROOT=/opt
-    cp ${HOME}/l_BaseKit_*.sh ${BASEKIT_ROOT}
+    wget ${BASEKIT_URL} -P ${BASEKIT_ROOT} && \
     chmod +x ${BASEKIT_ROOT}/l_BaseKit_*.sh && \
     cd ${BASEKIT_ROOT} && mkdir -p ${BASEKIT_ROOT}/intel/oneapi && \
     sh ./l_BaseKit_*.sh -a --cli --silent --eula accept --install-dir ${BASEKIT_ROOT}/intel/oneapi && \
