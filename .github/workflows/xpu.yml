@@ -37,7 +37,7 @@ jobs:
       docker-image: ${{ needs.linux-jammy-xpu-py3_8-build.outputs.docker-image }}
       test-matrix: ${{ needs.linux-jammy-xpu-py3_8-build.outputs.test-matrix }}
 
-  Tests-Failure-And-Report:
+  Build-Failure-And-Report:
     runs-on: linux.idc.xpu.tmp
     permissions:
       issues: write
@@ -53,5 +53,5 @@ jobs:
           notification_list="${{ secrets.ISSUE_NOTIFICATION_LIST }}"
           repo="${{ github.repository }}"
           gh --repo $repo issue comment 6  \
-              --body "XPU Nightly Failed $(date +'%F'), See: $build_url
+              --body "XPU Nightly Build Failed $(date +'%F'), See: $build_url
                       cc $notification_list"
