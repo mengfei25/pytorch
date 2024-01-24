@@ -3,14 +3,15 @@ ARG UBUNTU_VERSION
 FROM ubuntu:${UBUNTU_VERSION}
 
 ARG UBUNTU_VERSION
+ARG HTTP_PROXY
+
+ENV ftp_proxy="${HTTP_PROXY}"
+ENV http_proxy="${HTTP_PROXY}"
+ENV https_proxy="${HTTP_PROXY}"
 
 ENV DEBIAN_FRONTEND noninteractive
 
 ARG CLANG_VERSION
-
-ENV ftp_proxy=http://proxy-dmz.intel.com:911
-ENV http_proxy=http://proxy-dmz.intel.com:911
-ENV https_proxy=http://proxy-dmz.intel.com:912
 
 # Install common dependencies (so that this step can be cached separately)
 COPY ./common/install_base.sh install_base.sh
