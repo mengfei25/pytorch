@@ -47,7 +47,7 @@ jobs:
     if: always()
     steps:
       - name: Report github issue when failure detected
-        if: ${{ needs.linux-jammy-xpu-py3_8-build.result != 'failure' }}
+        if: ${{ needs.linux-jammy-xpu-py3_8-build.result == 'failure' }}
         run: |
           build_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           notification_list="${{ secrets.ISSUE_NOTIFICATION_LIST }}"
