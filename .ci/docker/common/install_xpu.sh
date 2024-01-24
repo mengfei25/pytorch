@@ -14,41 +14,29 @@ function install_ubuntu() {
     apt-get update -y
     apt-get install -y gpg-agent wget
 
-    # Set up the repository. To do this, download the key to the system keyring
-    wget -qO - https://repositories.intel.com/gpu/intel-graphics.key \
-        | gpg --dearmor --output /usr/share/keyrings/intel-graphics.gpg
-    wget -O- https://apt.repos.intel.com/intel-gpg-keys/GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB \
-        | gpg --dearmor | tee /usr/share/keyrings/oneapi-archive-keyring.gpg > /dev/null
+    DRIVER_DIR=${HOME}/driver/${driver_version}
 
-    # Add the signed entry to APT sources and configure the APT client to use the Intel repository
-    echo "deb [arch=amd64 signed-by=/usr/share/keyrings/intel-graphics.gpg] https://repositories.intel.com/gpu/ubuntu jammy/production/2328 unified" \
-        | tee /etc/apt/sources.list.d/intel-gpu-jammy.list
-    echo "deb [signed-by=/usr/share/keyrings/oneapi-archive-keyring.gpg] https://apt.repos.intel.com/oneapi all main" \
-        | tee /etc/apt/sources.list.d/oneAPI.list
+    # install driver
+    if [ ! -z ${DRIVER_DIR} ]; then
+        if [ -d ${DRIVER_DIR} ]; then
+            while read -r line; do
+                file=${DRIVER_DIR}/${line}
+                if [ -f $file ]; then
+                    if [[ ${file} == *"dkms"* ]] || [[ ${file} == *"/intel-fw-gpu"* ]] || [[ ${file} != *".deb" ]]; then
+                echo "skip the ${file}"
+            else
+                echo "install ${file}"
+                        dpkg -i  --force-all ${file}
+                    fi
+                fi
+            done < <(ls -1 ${DRIVER_DIR})
+        fi
+    fi
 
-    # Update the packages list and repository index
-    apt-get update
-
-    # The xpu-smi packages
-    apt-get install -y flex bison xpu-smi
-    # Compute and Media Runtimes
-    apt-get install -y \
-        intel-opencl-icd intel-level-zero-gpu level-zero \
-        intel-media-va-driver-non-free libmfx1 libmfxgen1 libvpl2 \
-        libegl-mesa0 libegl1-mesa libegl1-mesa-dev libgbm1 libgl1-mesa-dev libgl1-mesa-dri \
-        libglapi-mesa libgles2-mesa-dev libglx-mesa0 libigdgmm12 libxatracker2 mesa-va-drivers \
-        mesa-vdpau-drivers mesa-vulkan-drivers va-driver-all vainfo hwinfo clinfo
-    # Development Packages
-    apt-get install -y libigc-dev intel-igc-cm libigdfcl-dev libigfxcmrt-dev level-zero-dev
-    # Install Intel® oneAPI Base Toolkit
-    # if [ -n "$BASEKIT_VERSION" ]; then
-    #     apt-get install intel-basekit=$BASEKIT_VERSION -y
-    # else
-    #     apt-get install intel-basekit -y
-    # fi
-    BASEKIT_URL=https://registrationcenter-download.intel.com/akdlm/IRC_NAS/20f4e6a1-6b0b-4752-b8c1-e5eacba10e01/l_BaseKit_p_2024.0.0.49564_offline.sh
+    # install basekit
+    
     BASEKIT_ROOT=/opt
-    wget ${BASEKIT_URL} -P ${BASEKIT_ROOT} && \
+    cp ${HOME}/l_BaseKit_*.sh ${BASEKIT_ROOT}
     chmod +x ${BASEKIT_ROOT}/l_BaseKit_*.sh && \
     cd ${BASEKIT_ROOT} && mkdir -p ${BASEKIT_ROOT}/intel/oneapi && \
     sh ./l_BaseKit_*.sh -a --cli --silent --eula accept --install-dir ${BASEKIT_ROOT}/intel/oneapi && \
