@@ -3,7 +3,7 @@ name: xpu
 on:
   push:
     branches:
-      - mengfeil/xpu-nightly
+      - ruijie/xpu-test
     # tags:
     #   - ciflow/xpu/*
   workflow_dispatch:
