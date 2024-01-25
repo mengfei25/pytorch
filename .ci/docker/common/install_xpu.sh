@@ -15,11 +15,13 @@ function install_ubuntu() {
     apt-get install -y gpg-agent wget
     apt-get -y --fix-broken install
 
-    DRIVER_URL=http://mlpc.intel.com/downloads/gpu-new/validation/IPEX/driver/hotfix_agama-ci-devel-775.20/
-    DRIVER_ROOT=/opt/
+    export http_proxy="http://child-prc.intel.com:913"
+    export https_proxy="http://child-prc.intel.com:913"
+    DRIVER_URL=http://mlpc.intel.com/downloads/gpu-new/validation/IPEX/driver/hotfix_agama-ci-devel-775.20
+    DRIVER_ROOT=/opt
     cd ${DRIVER_ROOT} && mkdir -p ${DRIVER_ROOT}/driver
     wget -r -np --no-proxy ${DRIVER_URL} -P ${DRIVER_ROOT}/driver
-    DRIVER_DIR=${DRIVER_ROOT}/driver/mlpc.intel.com/downloads/gpu-new/validation/IPEX/driver/hotfix_agama-ci-devel-775.20/
+    DRIVER_DIR=${DRIVER_ROOT}/driver/mlpc.intel.com/downloads/gpu-new/validation/IPEX/driver/hotfix_agama-ci-devel-775.20
     # install driver
     if [ ! -z ${DRIVER_DIR} ]; then
         if [ -d ${DRIVER_DIR} ]; then
@@ -39,6 +41,8 @@ function install_ubuntu() {
     rm -rf ${DRIVER_ROOT}/driver
 
     # install basekit
+    export http_proxy="http://child-prc.intel.com:913"
+    export https_proxy="http://child-prc.intel.com:913"
     BASEKIT_URL=http://mlpc.intel.com/downloads/gpu-new/validation/IPEX/basekit/l_BaseKit_p_2024.1.0.226_offline.sh
     BASEKIT_ROOT=/opt
     wget ${BASEKIT_URL} -P ${BASEKIT_ROOT} && \
@@ -48,6 +52,7 @@ function install_ubuntu() {
     rm -rf ${BASEKIT_ROOT}/l_BaseKit_*.sh
 
     # Cleanup
+    apt-get -y --fix-broken install
     apt-get autoclean && apt-get clean
     rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 }
