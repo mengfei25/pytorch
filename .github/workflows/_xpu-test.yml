@@ -45,7 +45,7 @@ env:
 jobs:
   test:
     # Don't run on forked repos or empty test matrix
-    if: github.repository_owner == 'mengfei25' && toJSON(fromJSON(inputs.test-matrix).include) != '[]' && 1 == 0
+    if: github.repository_owner == 'mengfei25' && toJSON(fromJSON(inputs.test-matrix).include) != '[]'
     strategy:
       matrix: ${{ fromJSON(inputs.test-matrix) }}
       fail-fast: false
@@ -212,6 +212,7 @@ jobs:
             -w /var/lib/jenkins/workspace \
             "${DOCKER_IMAGE}"
           )
+          cat /tmp/github_env_${GITHUB_RUN_ID}
           # save container name for later step
           echo "CONTAINER_NAME=${container_name}" >> "$GITHUB_ENV"
           # jenkins user does not have write permission to mounted workspace; work-around by copying within container to jenkins home

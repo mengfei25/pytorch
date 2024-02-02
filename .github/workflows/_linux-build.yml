@@ -191,6 +191,7 @@ jobs:
             -w /var/lib/jenkins/workspace \
             "${DOCKER_IMAGE}"
           )
+          cat /tmp/github_env_${GITHUB_RUN_ID}
           docker exec -t "${container_name}" sh -c '.ci/pytorch/build.sh'
 
       - name: Archive artifacts into zip
