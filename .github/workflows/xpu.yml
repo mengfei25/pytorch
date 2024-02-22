@@ -1,10 +1,9 @@
-name: xpu
+name: xpu-cpu
 
 on:
   push:
-    tags:
-      - ciflow/xpu/*
-  workflow_dispatch:
+    branches:
+      - mengfeil/xpu-cpu
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref_name }}-${{ github.ref_type == 'branch' && github.sha }}-${{ github.event_name == 'workflow_dispatch' }}-${{ github.event_name == 'schedule' }}
@@ -17,18 +16,15 @@ jobs:
     with:
       build-environment: linux-jammy-xpu-py3.8
       docker-image-name: pytorch-linux-jammy-xpu-2024.0-py3
-      runner: linux.2xlarge
+      runner: linux.2xlarge.tmp
       test-matrix: |
         { include: [
-          { config: "default", shard: 1, num_shards: 4, runner: "linux.idc.xpu" },
-          { config: "default", shard: 2, num_shards: 4, runner: "linux.idc.xpu" },
-          { config: "default", shard: 3, num_shards: 4, runner: "linux.idc.xpu" },
-          { config: "default", shard: 4, num_shards: 4, runner: "linux.idc.xpu" },
+          { config: "default", shard: 1, num_shards: 1, runner: "linux.2xlarge.tmp" },
         ]}
 
   linux-jammy-xpu-py3_8-test:
     name: linux-jammy-xpu-py3.8
-    uses: ./.github/workflows/_xpu-test.yml
+    uses: ./.github/workflows/_linux-test.yml
     needs: linux-jammy-xpu-py3_8-build
     permissions:
       id-token: write

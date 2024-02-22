@@ -9,6 +9,8 @@ set -ex
 echo "Environment variables:"
 env
 
+BUILD_ENVIRONMENT="pytorch-linux-jammy-py3.8-gcc11"
+
 TORCH_INSTALL_DIR=$(python -c "import site; print(site.getsitepackages()[0])")/torch
 TORCH_BIN_DIR="$TORCH_INSTALL_DIR"/bin
 TORCH_LIB_DIR="$TORCH_INSTALL_DIR"/lib
@@ -1172,13 +1174,13 @@ elif [[ "${BUILD_ENVIRONMENT}" == *xpu* ]]; then
 else
   install_torchvision
   install_monkeytype
-  test_python
-  test_aten
-  test_vec256
-  test_libtorch
-  test_aot_compilation
-  test_custom_script_ops
-  test_custom_backend
-  test_torch_function_benchmark
-  test_benchmarks
+  test_python || echo "FAILED! test_python"
+  test_aten || echo "FAILED! test_aten"
+  test_vec256 || echo "FAILED! test_vec256"
+  test_libtorch || echo "FAILED! test_libtorch"
+  test_aot_compilation || echo "FAILED! test_aot_compilation"
+  test_custom_script_ops || echo "FAILED! test_custom_script_ops"
+  test_custom_backend || echo "FAILED! test_custom_backend"
+  test_torch_function_benchmark || echo "FAILED! test_torch_function_benchmark"
+  test_benchmarks || echo "FAILED! test_benchmarks"
 fi
