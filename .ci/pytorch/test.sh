@@ -156,6 +156,7 @@ if [[ "$BUILD_ENVIRONMENT" == *xpu* ]]; then
   # Check XPU status before testing
   xpu-smi discovery
 fi
+source /opt/intel/oneapi/compiler/latest/env/vars.sh
 
 if [[ "$BUILD_ENVIRONMENT" != *-bazel-* ]] ; then
   # JIT C++ extensions require ninja.
