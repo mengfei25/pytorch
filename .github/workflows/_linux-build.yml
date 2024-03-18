@@ -161,7 +161,7 @@ jobs:
         with:
           cache_dir: .pytest_cache
           job_identifier: ${{ github.workflow }}_${{ inputs.build-environment }}
-          s3_bucket: ${{ inputs.s3-bucket }}
+          # s3_bucket: ${{ inputs.s3-bucket }}
 
       - name: Build
         if: steps.filter.outputs.is-test-matrix-empty == 'False' || inputs.test-matrix == ''
@@ -227,7 +227,7 @@ jobs:
           retention-days: 14
           if-no-files-found: error
           path: artifacts.zip
-          s3-bucket: ${{ inputs.s3-bucket }}
+          # s3-bucket: ${{ inputs.s3-bucket }}
 
       - name: Upload sccache stats
         if: steps.build.outcome != 'skipped'
@@ -239,7 +239,7 @@ jobs:
           retention-days: 365
           if-no-files-found: warn
           path: sccache-stats-*.json
-          s3-bucket: ${{ inputs.s3-bucket }}
+          # s3-bucket: ${{ inputs.s3-bucket }}
 
       # - name: Teardown Linux
       #   uses: pytorch/test-infra/.github/actions/teardown-linux@main
