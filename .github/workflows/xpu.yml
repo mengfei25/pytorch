@@ -2,8 +2,10 @@ name: xpu
 
 on:
   push:
-    tags:
-      - ciflow/xpu/*
+    branches:
+      - mengfeil/lts-2024.1.1
+    # tags:
+    #   - ciflow/xpu/*
   workflow_dispatch:
 
 concurrency:
@@ -17,13 +19,13 @@ jobs:
     with:
       build-environment: linux-jammy-xpu-py3.8
       docker-image-name: pytorch-linux-jammy-xpu-2024.0-py3
-      runner: linux.2xlarge
+      runner: linux.idc.xpu.lts
       test-matrix: |
         { include: [
-          { config: "default", shard: 1, num_shards: 4, runner: "linux.idc.xpu" },
-          { config: "default", shard: 2, num_shards: 4, runner: "linux.idc.xpu" },
-          { config: "default", shard: 3, num_shards: 4, runner: "linux.idc.xpu" },
-          { config: "default", shard: 4, num_shards: 4, runner: "linux.idc.xpu" },
+          { config: "default", shard: 1, num_shards: 4, runner: "linux.idc.xpu.lts" },
+          { config: "default", shard: 2, num_shards: 4, runner: "linux.idc.xpu.lts" },
+          { config: "default", shard: 3, num_shards: 4, runner: "linux.idc.xpu.lts" },
+          { config: "default", shard: 4, num_shards: 4, runner: "linux.idc.xpu.lts" },
         ]}
 
   linux-jammy-xpu-py3_8-test:
