@@ -11,41 +11,36 @@ set -xe
 # Users should update to the latest version as it becomes available
 
 function install_ubuntu() {
-    apt-get update -y
-    apt-get install -y gpg-agent wget
+    # Driver
+    apt update
+    apt install -y gpg-agent wget rsync
 
-    # Set up the repository. To do this, download the key to the system keyring
-    wget -qO - https://repositories.intel.com/gpu/intel-graphics.key \
-        | gpg --dearmor --output /usr/share/keyrings/intel-graphics.gpg
-    wget -O- https://apt.repos.intel.com/intel-gpg-keys/GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB \
-        | gpg --dearmor | tee /usr/share/keyrings/oneapi-archive-keyring.gpg > /dev/null
-
-    # Add the signed entry to APT sources and configure the APT client to use the Intel repository
-    echo "deb [arch=amd64 signed-by=/usr/share/keyrings/intel-graphics.gpg] https://repositories.intel.com/gpu/ubuntu jammy/production/2328 unified" \
-        | tee /etc/apt/sources.list.d/intel-gpu-jammy.list
-    echo "deb [signed-by=/usr/share/keyrings/oneapi-archive-keyring.gpg] https://apt.repos.intel.com/oneapi all main" \
-        | tee /etc/apt/sources.list.d/oneAPI.list
-
-    # Update the packages list and repository index
-    apt-get update
-
-    # The xpu-smi packages
-    apt-get install -y flex bison xpu-smi
-    # Compute and Media Runtimes
-    apt-get install -y \
+    . /etc/os-release
+    if [[ ! " jammy " =~ " ${VERSION_CODENAME} " ]]; then
+        echo "Ubuntu version ${VERSION_CODENAME} not supported"
+    else
+        wget -qO - https://repositories.intel.com/gpu/intel-graphics.key |sudo gpg --dearmor --output /usr/share/keyrings/intel-graphics.gpg
+        echo "deb [arch=amd64 signed-by=/usr/share/keyrings/intel-graphics.gpg] https://repositories.intel.com/gpu/ubuntu ${VERSION_CODENAME}/lts/2350 unified" | \
+        sudo tee /etc/apt/sources.list.d/intel-gpu-${VERSION_CODENAME}.list
+        apt update
+    fi
+    apt install -y linux-headers-$(uname -r) flex bison xpu-smi # intel-fw-gpu intel-i915-dkms
+    apt install -y \
         intel-opencl-icd intel-level-zero-gpu level-zero \
         intel-media-va-driver-non-free libmfx1 libmfxgen1 libvpl2 \
         libegl-mesa0 libegl1-mesa libegl1-mesa-dev libgbm1 libgl1-mesa-dev libgl1-mesa-dri \
         libglapi-mesa libgles2-mesa-dev libglx-mesa0 libigdgmm12 libxatracker2 mesa-va-drivers \
         mesa-vdpau-drivers mesa-vulkan-drivers va-driver-all vainfo hwinfo clinfo
-    # Development Packages
-    apt-get install -y libigc-dev intel-igc-cm libigdfcl-dev libigfxcmrt-dev level-zero-dev
-    # Install Intel® oneAPI Base Toolkit
-    if [ -n "$BASEKIT_VERSION" ]; then
-        apt-get install intel-basekit=$BASEKIT_VERSION -y
-    else
-        apt-get install intel-basekit -y
-    fi
+    apt install -y \
+        libigc-dev intel-igc-cm libigdfcl-dev libigfxcmrt-dev level-zero-dev
+
+    # oneAPI
+    mkdir _install_basekit && cd _install_basekit
+    wget https://af01p-fm.devtools.intel.com/artifactory/compilers-archive-fm-local/compiler_ppkg-hotfix/linux/20240321/l_20240321_oneapipkg.tar.gz --no-proxy
+    tar xf l_20240321_oneapipkg.tar.gz
+    mkdir -p /opt/intel/oneapi
+    rsync -avz --delete linux_qa_release/ /opt/intel/oneapi/
+    cd .. && rm -rf _install_basekit
 
     # Cleanup
     apt-get autoclean && apt-get clean
