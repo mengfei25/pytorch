@@ -129,6 +129,7 @@ if [[ "$BUILD_ENVIRONMENT" == *cuda* || "$BUILD_ENVIRONMENT" == *rocm* ]]; then
   # devices on expensive gpu machines
   export PYTORCH_TESTING_DEVICE_ONLY_FOR="cuda"
 elif [[ "$BUILD_ENVIRONMENT" == *xpu* ]]; then
+  export PYTORCH_ENABLE_XPU_FALLBACK=1
   export PYTORCH_TESTING_DEVICE_ONLY_FOR="xpu"
   # setting PYTHON_TEST_EXTRA_OPTION
   export PYTHON_TEST_EXTRA_OPTION="--xpu"
