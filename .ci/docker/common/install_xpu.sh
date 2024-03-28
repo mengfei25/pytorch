@@ -36,7 +36,8 @@ function install_ubuntu() {
 
     # oneAPI
     mkdir _install_basekit && cd _install_basekit
-    wget https://af01p-fm.devtools.intel.com/artifactory/compilers-archive-fm-local/compiler_ppkg-hotfix/linux/20240321/l_20240321_oneapipkg.tar.gz --no-proxy
+    # wget https://af01p-fm.devtools.intel.com/artifactory/compilers-archive-fm-local/compiler_ppkg-hotfix/linux/20240321/l_20240321_oneapipkg.tar.gz --no-proxy
+    wget --no-proxy -q http://mengfeil-ubuntu.sh.intel.com/pytorch/l_20240321_oneapipkg.tar.gz
     tar xf l_20240321_oneapipkg.tar.gz
     mkdir -p /opt/intel/oneapi
     rsync -avz --delete linux_qa_release/ /opt/intel/oneapi/
