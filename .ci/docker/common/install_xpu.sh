@@ -15,15 +15,13 @@ function install_ubuntu() {
     apt update
     apt install -y gpg-agent wget rsync
 
-    . /etc/os-release
-    if [[ ! " jammy " =~ " ${VERSION_CODENAME} " ]]; then
-        echo "Ubuntu version ${VERSION_CODENAME} not supported"
-    else
-        wget -qO - https://repositories.intel.com/gpu/intel-graphics.key |sudo gpg --dearmor --output /usr/share/keyrings/intel-graphics.gpg
-        echo "deb [arch=amd64 signed-by=/usr/share/keyrings/intel-graphics.gpg] https://repositories.intel.com/gpu/ubuntu ${VERSION_CODENAME}/lts/2350 unified" | \
-        sudo tee /etc/apt/sources.list.d/intel-gpu-${VERSION_CODENAME}.list
-        apt update
-    fi
+    apt install -y curl gnupg
+    mkdir -p /etc/apt/keyrings
+    curl --noproxy '*' -fsSL https://gfx-assets-build.intel.com/artifactory/api/gpg/key/public | sudo gpg --yes --dearmor -o /etc/apt/keyrings/gfx-assets-build.gpg
+    echo "deb [signed-by=/etc/apt/keyrings/gfx-assets-build.gpg] https://gfx-assets-build.fm.intel.com/artifactory/gfx-debs-per-build untested/main/agama/hotfix_agama-ci-devel-821/jammy hotfix_agama-ci-devel-821.32" |\
+        sudo tee /etc/apt/sources.list.d/https___gfx_assets_build_fm_intel_com_artifactory_gfx_debs_per_build_untested_main_agama_hotfix_agama_ci_devel_821_jammy_hotfix_agama_ci_devel_821_32.list > /dev/null
+    apt update
+
     apt install -y linux-headers-$(uname -r) flex bison xpu-smi # intel-fw-gpu intel-i915-dkms
     apt install -y \
         intel-opencl-icd intel-level-zero-gpu level-zero \
@@ -36,11 +34,9 @@ function install_ubuntu() {
 
     # oneAPI
     mkdir _install_basekit && cd _install_basekit
-    # wget https://af01p-fm.devtools.intel.com/artifactory/compilers-archive-fm-local/compiler_ppkg-hotfix/linux/20240321/l_20240321_oneapipkg.tar.gz --no-proxy
-    wget --no-proxy -q http://mengfeil-ubuntu.sh.intel.com/pytorch/l_20240321_oneapipkg.tar.gz
-    tar xf l_20240321_oneapipkg.tar.gz
-    mkdir -p /opt/intel/oneapi
-    rsync -avz --delete linux_qa_release/ /opt/intel/oneapi/
+    rm -f l_intel-for-pytorch-gpu-dev_p_0.5.0.37_offline.sh
+    wget --no-proxy -q http://mlpc.intel.com/downloads/gpu-new/components/driver/upstream_ipex/l_intel-for-pytorch-gpu-dev_p_0.5.0.37_offline.sh
+    bash l_intel-for-pytorch-gpu-dev_p_0.5.0.37_offline.sh -a -s --eula accept
     cd .. && rm -rf _install_basekit
 
     # Cleanup
