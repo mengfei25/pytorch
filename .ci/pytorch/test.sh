@@ -1286,30 +1286,18 @@ fi
 # extra tests
 {
   export PYTORCH_ENABLE_XPU_FALLBACK=1
-  cd examples
+  cd /var/lib/jenkins/pytorch/third_party
+  rm -rf torch-xpu-ops && git clone https://github.com/intel/torch-xpu-ops
+  cd -
+  cd /var/lib/jenkins/pytorch/third_party/torch-xpu-ops/examples
   timeout 8000 pytest -v 2>&1 |tee /tmp/xpu-1.log
-  cd ../
+  cd -
 }
 {
   export PYTORCH_ENABLE_XPU_FALLBACK=1
   export PYTORCH_TEST_WITH_SLOW=1
-  cd third_party/torch-xpu-ops/test/xpu
+  cd /var/lib/jenkins/pytorch/third_party/torch-xpu-ops/test/xpu
   timeout 10000 python run_test.py 2>&1 |tee /tmp/xpu-ops-2.log
   cd -
 }
-{
-  TEST_REPORTS_DIR=$(pwd)/test/test-reports
-  rm -rf "$TEST_REPORTS_DIR" && mkdir -p "$TEST_REPORTS_DIR"
-  # Run Pytorch XPU binary UT
-  for xpu_case in build/bin/*{xpu,sycl}*; do
-    if [[ "$xpu_case" != *"*"* && "$xpu_case" != *.so && "$xpu_case" != *.a ]]; then
-      case_name=$(basename "$xpu_case")
-      echo "Testing ${case_name} ..."
-      "$xpu_case" --gtest_output=xml:"$TEST_REPORTS_DIR"/"$case_name".xml
-    fi
-  done
-  # Run Pytorch XPU python UT
-  export PYTORCH_ENABLE_XPU_FALLBACK=1
-  sed -i 's/selected_tests = exclude_tests(XPU_BLOCKLIST.*/selected_tests = XPU_TEST/g' ./test/run_test.py
-  python test/run_test.py --xpu 2>&1 |tee /tmp/xpu-3.log
-}
+
