@@ -14,23 +14,14 @@ function install_ubuntu() {
     # Driver
     apt update
     apt install -y gpg-agent wget rsync
-
     apt install -y curl gnupg
-    mkdir -p /etc/apt/keyrings
-    curl --noproxy '*' -fsSL https://gfx-assets-build.intel.com/artifactory/api/gpg/key/public | gpg --yes --dearmor -o /etc/apt/keyrings/gfx-assets-build.gpg
-    echo "deb [signed-by=/etc/apt/keyrings/gfx-assets-build.gpg] https://gfx-assets-build.fm.intel.com/artifactory/gfx-debs-per-build untested/main/agama/hotfix_agama-ci-devel-821/jammy hotfix_agama-ci-devel-821.32" |\
-        tee /etc/apt/sources.list.d/https___gfx_assets_build_fm_intel_com_artifactory_gfx_debs_per_build_untested_main_agama_hotfix_agama_ci_devel_821_jammy_hotfix_agama_ci_devel_821_32.list > /dev/null
-    apt update
 
-    apt install -y linux-headers-$(uname -r) flex bison xpu-smi # intel-fw-gpu intel-i915-dkms
-    apt install -y \
-        intel-opencl-icd intel-level-zero-gpu level-zero \
-        intel-media-va-driver-non-free libmfx1 libmfxgen1 libvpl2 \
-        libegl-mesa0 libegl1-mesa libegl1-mesa-dev libgbm1 libgl1-mesa-dev libgl1-mesa-dri \
-        libglapi-mesa libgles2-mesa-dev libglx-mesa0 libigdgmm12 libxatracker2 mesa-va-drivers \
-        mesa-vdpau-drivers mesa-vulkan-drivers va-driver-all vainfo hwinfo clinfo
-    apt install -y \
-        libigc-dev intel-igc-cm libigdfcl-dev libigfxcmrt-dev level-zero-dev
+    # Rolling driver
+    mkdir _install_driver && cd _install_driver
+    wget --no-proxy http://mengfeil-ubuntu.sh.intel.com/pytorch/xpu/hotfix_agama-ci-devel-821.32.tgz
+    tar xf hotfix_agama-ci-devel-821.32.tgz
+    apt install hotfix_agama-ci-devel-821.32/*.deb
+    cd .. && rm -rf _install_driver
 
     # oneAPI
     mkdir _install_basekit && cd _install_basekit
