@@ -26,7 +26,7 @@ function install_ubuntu() {
     # oneAPI
     mkdir _install_basekit && cd _install_basekit
     rm -f l_intel-for-pytorch-gpu-dev_p_0.5.0.37_offline.sh
-    wget --no-proxy http://mlpc.intel.com/downloads/gpu-new/components/driver/upstream_ipex/l_intel-for-pytorch-gpu-dev_p_0.5.0.37_offline.sh
+    wget --no-proxy -q http://mlpc.intel.com/downloads/gpu-new/components/driver/upstream_ipex/l_intel-for-pytorch-gpu-dev_p_0.5.0.37_offline.sh
     bash l_intel-for-pytorch-gpu-dev_p_0.5.0.37_offline.sh -a -s --eula accept
     cd .. && rm -rf _install_basekit
 
