@@ -1283,12 +1283,12 @@ else
   test_benchmarks
 fi
 
-# extra tests
+# extra tests for torch xpu ops
+cd /var/lib/jenkins/pytorch/third_party
+rm -rf torch-xpu-ops && git clone https://github.com/intel/torch-xpu-ops
+cd -
 {
   export PYTORCH_ENABLE_XPU_FALLBACK=1
-  cd /var/lib/jenkins/pytorch/third_party
-  rm -rf torch-xpu-ops && git clone https://github.com/intel/torch-xpu-ops
-  cd -
   cd /var/lib/jenkins/pytorch/third_party/torch-xpu-ops/examples
   timeout 8000 pytest -v 2>&1 |tee /tmp/xpu-1.log
   cd -
