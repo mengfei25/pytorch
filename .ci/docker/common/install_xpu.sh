@@ -20,7 +20,7 @@ function install_ubuntu() {
     curl --noproxy '*' -fsSL https://gfx-assets-build.intel.com/artifactory/api/gpg/key/public | gpg --yes --dearmor -o /etc/apt/keyrings/gfx-assets-build.gpg
     echo "deb [signed-by=/etc/apt/keyrings/gfx-assets-build.gpg] https://gfx-assets-build.fm.intel.com/artifactory/gfx-debs-per-build untested/main/agama/hotfix_agama-ci-devel-821/jammy hotfix_agama-ci-devel-821.32" |\
         tee /etc/apt/sources.list.d/https___gfx_assets_build_fm_intel_com_artifactory_gfx_debs_per_build_untested_main_agama_hotfix_agama_ci_devel_821_jammy_hotfix_agama_ci_devel_821_32.list > /dev/null
-    ftp_proxy= http_proxy= https_proxy= apt update
+    apt update
 
     apt install -y linux-headers-$(uname -r) flex bison xpu-smi # intel-fw-gpu intel-i915-dkms
     apt install -y \
@@ -35,7 +35,7 @@ function install_ubuntu() {
     # oneAPI
     mkdir _install_basekit && cd _install_basekit
     rm -f l_intel-for-pytorch-gpu-dev_p_0.5.0.37_offline.sh
-    wget --no-proxy -q http://mlpc.intel.com/downloads/gpu-new/components/driver/upstream_ipex/l_intel-for-pytorch-gpu-dev_p_0.5.0.37_offline.sh
+    wget --no-proxy http://mlpc.intel.com/downloads/gpu-new/components/driver/upstream_ipex/l_intel-for-pytorch-gpu-dev_p_0.5.0.37_offline.sh
     bash l_intel-for-pytorch-gpu-dev_p_0.5.0.37_offline.sh -a -s --eula accept
     cd .. && rm -rf _install_basekit
 
