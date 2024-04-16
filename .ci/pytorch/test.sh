@@ -1287,6 +1287,9 @@ fi
 cd /var/lib/jenkins/pytorch/third_party
 rm -rf torch-xpu-ops && git clone https://github.com/intel/torch-xpu-ops
 cd -
+cd /var/lib/jenkins/pytorch/third_party/torch-xpu-ops
+git reset --hard $(cat ../xpu.txt)
+cd -
 {
   export PYTORCH_ENABLE_XPU_FALLBACK=1
   cd /var/lib/jenkins/pytorch/third_party/torch-xpu-ops/examples
