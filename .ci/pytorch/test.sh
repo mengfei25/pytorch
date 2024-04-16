@@ -143,6 +143,7 @@ if [[ "$BUILD_ENVIRONMENT" == *cuda* || "$BUILD_ENVIRONMENT" == *rocm* ]]; then
   # devices on expensive gpu machines
   export PYTORCH_TESTING_DEVICE_ONLY_FOR="cuda"
 elif [[ "$BUILD_ENVIRONMENT" == *xpu* ]]; then
+  export PYTORCH_ENABLE_XPU_FALLBACK=1
   export PYTORCH_TESTING_DEVICE_ONLY_FOR="xpu"
   # setting PYTHON_TEST_EXTRA_OPTION
   export PYTHON_TEST_EXTRA_OPTION="--xpu"
@@ -1281,3 +1282,25 @@ else
   test_torch_function_benchmark
   test_benchmarks
 fi
+
+# extra tests for torch xpu ops
+cd /var/lib/jenkins/pytorch/third_party
+rm -rf torch-xpu-ops && git clone https://github.com/intel/torch-xpu-ops
+cd -
+cd /var/lib/jenkins/pytorch/third_party/torch-xpu-ops
+git reset --hard $(cat ../xpu.txt)
+cd -
+{
+  export PYTORCH_ENABLE_XPU_FALLBACK=1
+  cd /var/lib/jenkins/pytorch/third_party/torch-xpu-ops/examples
+  timeout 8000 pytest -v 2>&1 |tee /tmp/xpu-1.log
+  cd -
+}
+{
+  export PYTORCH_ENABLE_XPU_FALLBACK=1
+  export PYTORCH_TEST_WITH_SLOW=1
+  cd /var/lib/jenkins/pytorch/third_party/torch-xpu-ops/test/xpu
+  timeout 10000 python run_test.py 2>&1 |tee /tmp/xpu-ops-2.log
+  cd -
+}
+

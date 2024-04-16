@@ -11,41 +11,26 @@ set -xe
 # Users should update to the latest version as it becomes available
 
 function install_ubuntu() {
-    apt-get update -y
-    apt-get install -y gpg-agent wget
+    # Driver
+    apt update
+    apt install -y gpg-agent wget rsync
+    apt install -y curl gnupg
 
-    # Set up the repository. To do this, download the key to the system keyring
-    wget -qO - https://repositories.intel.com/gpu/intel-graphics.key \
-        | gpg --dearmor --output /usr/share/keyrings/intel-graphics.gpg
-    wget -O- https://apt.repos.intel.com/intel-gpg-keys/GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB \
-        | gpg --dearmor | tee /usr/share/keyrings/oneapi-archive-keyring.gpg > /dev/null
+    # Rolling driver
+    mkdir _install_driver && cd _install_driver
+    wget --no-proxy http://mengfeil-ubuntu.sh.intel.com/pytorch/xpu/hotfix_agama-ci-devel-821.32.tgz
+    tar xf hotfix_agama-ci-devel-821.32.tgz
+    for i in 1 2 3; do 
+        dpkg -i $(find hotfix_agama-ci-devel-821.32/ -name "*.deb") && break || apt install -fy
+    done
+    cd .. && rm -rf _install_driver
 
-    # Add the signed entry to APT sources and configure the APT client to use the Intel repository
-    echo "deb [arch=amd64 signed-by=/usr/share/keyrings/intel-graphics.gpg] https://repositories.intel.com/gpu/ubuntu jammy/production/2328 unified" \
-        | tee /etc/apt/sources.list.d/intel-gpu-jammy.list
-    echo "deb [signed-by=/usr/share/keyrings/oneapi-archive-keyring.gpg] https://apt.repos.intel.com/oneapi all main" \
-        | tee /etc/apt/sources.list.d/oneAPI.list
-
-    # Update the packages list and repository index
-    apt-get update
-
-    # The xpu-smi packages
-    apt-get install -y flex bison xpu-smi
-    # Compute and Media Runtimes
-    apt-get install -y \
-        intel-opencl-icd intel-level-zero-gpu level-zero \
-        intel-media-va-driver-non-free libmfx1 libmfxgen1 libvpl2 \
-        libegl-mesa0 libegl1-mesa libegl1-mesa-dev libgbm1 libgl1-mesa-dev libgl1-mesa-dri \
-        libglapi-mesa libgles2-mesa-dev libglx-mesa0 libigdgmm12 libxatracker2 mesa-va-drivers \
-        mesa-vdpau-drivers mesa-vulkan-drivers va-driver-all vainfo hwinfo clinfo
-    # Development Packages
-    apt-get install -y libigc-dev intel-igc-cm libigdfcl-dev libigfxcmrt-dev level-zero-dev
-    # Install Intel® oneAPI Base Toolkit
-    if [ -n "$BASEKIT_VERSION" ]; then
-        apt-get install intel-basekit=$BASEKIT_VERSION -y
-    else
-        apt-get install intel-basekit -y
-    fi
+    # oneAPI
+    mkdir _install_basekit && cd _install_basekit
+    rm -f l_intel-for-pytorch-gpu-dev_p_0.5.0.37_offline.sh
+    wget --no-proxy -q http://mlpc.intel.com/downloads/gpu-new/components/driver/upstream_ipex/l_intel-for-pytorch-gpu-dev_p_0.5.0.37_offline.sh
+    bash l_intel-for-pytorch-gpu-dev_p_0.5.0.37_offline.sh -a -s --eula accept
+    cd .. && rm -rf _install_basekit
 
     # Cleanup
     apt-get autoclean && apt-get clean
