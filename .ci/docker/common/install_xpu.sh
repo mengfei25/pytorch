@@ -20,7 +20,7 @@ function install_ubuntu() {
     mkdir _install_driver && cd _install_driver
     wget --no-proxy http://mengfeil-ubuntu.sh.intel.com/pytorch/xpu/hotfix_agama-ci-devel-821.32.tgz
     tar xf hotfix_agama-ci-devel-821.32.tgz
-    apt install hotfix_agama-ci-devel-821.32/*.deb
+    apt install $(find hotfix_agama-ci-devel-821.32/ -name "*.deb")
     cd .. && rm -rf _install_driver
 
     # oneAPI
