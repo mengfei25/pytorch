@@ -368,6 +368,7 @@ fi
 # Build image
 docker build \
        --no-cache \
+       --build-arg "HTTP_PROXY=${http_proxy}" \
        --progress=plain \
        --build-arg "BUILD_ENVIRONMENT=${image}" \
        --build-arg "PROTOBUF=${PROTOBUF:-}" \
