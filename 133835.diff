@@ -1,0 +1,2557 @@
+diff --git a/docs/source/backends.rst b/docs/source/backends.rst
+index 2fd9277fa814d0..234c760075c8e1 100644
+--- a/docs/source/backends.rst
++++ b/docs/source/backends.rst
+@@ -234,4 +234,4 @@ torch.backends.opt_einsum
+ torch.backends.xeon
+ ^^^^^^^^^^^^^^^^^^^
+ .. automodule:: torch.backends.xeon
+-.. py:module:: torch.backends.xeon.run_cpu
++.. automodule:: torch.backends.xeon.run_cpu
+diff --git a/setup.py b/setup.py
+index 25c1d53495f819..88eb769f7c9f8c 100644
+--- a/setup.py
++++ b/setup.py
+@@ -1098,6 +1098,7 @@ def make_relative_rpath_args(path):
+             "convert-caffe2-to-onnx = caffe2.python.onnx.bin.conversion:caffe2_to_onnx",
+             "convert-onnx-to-caffe2 = caffe2.python.onnx.bin.conversion:onnx_to_caffe2",
+             "torchrun = torch.distributed.run:main",
++            "torch-xeon-launcher = torch.backends.xeon.run_cpu:main",
+         ],
+         "torchrun.logs_specs": [
+             "default = torch.distributed.elastic.multiprocessing:DefaultLogsSpecs",
+diff --git a/test/backends/xeon/test_launch.py b/test/backends/xeon/test_launch.py
+index bab10060152127..3be9589ccafc02 100644
+--- a/test/backends/xeon/test_launch.py
++++ b/test/backends/xeon/test_launch.py
+@@ -17,38 +17,57 @@ def tearDown(self):
+         shutil.rmtree(self._test_dir)
+ 
+     def test_cpu_info(self):
+-        lscpu_info = """# The following is the parsable format, which can be fed to other
+-# programs. Each different item in every column has an unique ID
+-# starting from zero.
+-# CPU,Core,Socket,Node
+-0,0,0,0
+-1,1,0,0
+-2,2,0,0
+-3,3,0,0
+-4,4,1,1
+-5,5,1,1
+-6,6,1,1
+-7,7,1,1
+-8,0,0,0
+-9,1,0,0
+-10,2,0,0
+-11,3,0,0
+-12,4,1,1
+-13,5,1,1
+-14,6,1,1
+-15,7,1,1
++        lscpu_info = """
++CPU NODE SOCKET CORE L1d:L1i:L2:L3 ONLINE    MAXMHZ   MINMHZ      MHZ
++  0    0      0    0 0:0:0:0          yes 5000.0000 800.0000 2400.000
++  1    0      0    1 0:0:0:0          yes 5000.0000 800.0000 2400.000
++  2    0      0    2 0:0:0:0          yes 5000.0000 800.0000 2400.000
++  3    0      0    3 0:0:0:0          yes 5000.0000 800.0000 2400.000
++  4    1      1    4 0:0:0:0          yes 5000.0000 800.0000 2400.000
++  5    1      1    5 0:0:0:0          yes 5000.0000 800.0000 2400.000
++  6    1      1    6 0:0:0:0          yes 5000.0000 800.0000 2400.000
++  7    1      1    7 0:0:0:0          yes 5000.0000 800.0000 2400.000
++  8    0      0    0 0:0:0:0          yes 5000.0000 800.0000 2400.000
++  9    0      0    1 0:0:0:0          yes 5000.0000 800.0000 2400.000
++ 10    0      0    2 0:0:0:0          yes 5000.0000 800.0000 2400.000
++ 11    0      0    3 0:0:0:0          yes 5000.0000 800.0000 2400.000
++ 12    1      1    4 0:0:0:0          yes 5000.0000 800.0000 2400.000
++ 13    1      1    5 0:0:0:0          yes 5000.0000 800.0000 2400.000
++ 14    1      1    6 0:0:0:0          yes 5000.0000 800.0000 2400.000
++ 15    1      1    7 0:0:0:0          yes 5000.0000 800.0000 2400.000
+ """
+-        from torch.backends.xeon.run_cpu import _CPUinfo
++        from torch.backends.xeon._cpu_info import CPUPoolList
+ 
+-        cpuinfo = _CPUinfo(lscpu_info)
+-        assert cpuinfo._physical_core_nums() == 8
+-        assert cpuinfo._logical_core_nums() == 16
+-        assert cpuinfo.get_node_physical_cores(0) == [0, 1, 2, 3]
+-        assert cpuinfo.get_node_physical_cores(1) == [4, 5, 6, 7]
+-        assert cpuinfo.get_node_logical_cores(0) == [0, 1, 2, 3, 8, 9, 10, 11]
+-        assert cpuinfo.get_node_logical_cores(1) == [4, 5, 6, 7, 12, 13, 14, 15]
+-        assert cpuinfo.get_all_physical_cores() == [0, 1, 2, 3, 4, 5, 6, 7]
+-        assert cpuinfo.get_all_logical_cores() == [
++        cpupool = CPUPoolList(lscpu_txt=lscpu_info)
++        assert [c.cpu for c in cpupool.pool_all] == [
++            0,
++            1,
++            2,
++            3,
++            4,
++            5,
++            6,
++            7,
++            8,  # noqa: Q003
++            9,
++            10,
++            11,
++            12,
++            13,
++            14,
++            15,
++        ]
++        assert [c.cpu for c in cpupool.pool_all if c.is_physical_core] == [
++            0,
++            1,
++            2,
++            3,
++            4,
++            5,  # noqa: Q003
++            6,
++            7,
++        ]
++        assert [c.cpu for c in cpupool.pool_all if c.node == 0] == [
+             0,
+             1,
+             2,
+@@ -57,6 +76,8 @@ def test_cpu_info(self):
+             9,
+             10,
+             11,
++        ]
++        assert [c.cpu for c in cpupool.pool_all if c.node == 1] == [
+             4,
+             5,
+             6,
+@@ -66,22 +87,40 @@ def test_cpu_info(self):
+             14,
+             15,
+         ]
+-        assert cpuinfo.numa_aware_check([0, 1, 2, 3]) == [0]
+-        assert cpuinfo.numa_aware_check([4, 5, 6, 7]) == [1]
+-        assert cpuinfo.numa_aware_check([2, 3, 4, 5]) == [0, 1]
++        assert [
++            c.cpu for c in cpupool.pool_all if c.node == 0 and c.is_physical_core
++        ] == [0, 1, 2, 3]
++        assert [
++            c.cpu for c in cpupool.pool_all if c.node == 1 and c.is_physical_core
++        ] == [4, 5, 6, 7]
++
++    def test_multi_threads_module(self):
++        num = 0
++        with subprocess.Popen(
++            f'python -m torch.backends.xeon.run_cpu --ninstances 4 --memory-allocator default \
++            --omp-runtime default --multi-task-manager none --log-dir {self._test_dir} --no-python echo "test"',
++            shell=True,
++            stdout=subprocess.PIPE,
++            stderr=subprocess.STDOUT,
++        ) as p:
++            for line in p.stdout.readlines():
++                segs = str(line, "utf-8").strip().split(":")
++                if segs[-1].strip() == "test":
++                    num += 1
++        assert num == 4, "Failed to launch multiple instances for inference"
+ 
+-    def test_multi_threads(self):
++    def test_multi_threads_command(self):
+         num = 0
+         with subprocess.Popen(
+-            f"python -m torch.backends.xeon.run_cpu --ninstances 4 --use-default-allocator \
+-            --disable-iomp --disable-numactl --disable-taskset --log-path {self._test_dir} --no-python pwd",
++            f'torch-xeon-launcher --ninstances 4 --memory-allocator default \
++            --omp-runtime default --multi-task-manager none --log-dir {self._test_dir} --no-python echo "test"',
+             shell=True,
+             stdout=subprocess.PIPE,
+             stderr=subprocess.STDOUT,
+         ) as p:
+             for line in p.stdout.readlines():
+-                segs = str(line, "utf-8").strip().split("-")
+-                if segs[-1].strip() == "pwd":
++                segs = str(line, "utf-8").strip().split(":")
++                if segs[-1].strip() == "test":
+                     num += 1
+         assert num == 4, "Failed to launch multiple instances for inference"
+ 
+diff --git a/torch/backends/__init__.py b/torch/backends/__init__.py
+index 3017351888698e..90781c996325eb 100644
+--- a/torch/backends/__init__.py
++++ b/torch/backends/__init__.py
+@@ -69,4 +69,5 @@ def __getattr__(self, attr):
+     nnpack as nnpack,
+     openmp as openmp,
+     quantized as quantized,
++    xeon as xeon,
+ )
+diff --git a/torch/backends/xeon/__init__.py b/torch/backends/xeon/__init__.py
+index e69de29bb2d1d6..d29679e01ae846 100644
+--- a/torch/backends/xeon/__init__.py
++++ b/torch/backends/xeon/__init__.py
+@@ -0,0 +1 @@
++from . import run_cpu
+diff --git a/torch/backends/xeon/_cpu_info.py b/torch/backends/xeon/_cpu_info.py
+new file mode 100644
+index 00000000000000..f48b479c6e349a
+--- /dev/null
++++ b/torch/backends/xeon/_cpu_info.py
+@@ -0,0 +1,455 @@
++# mypy: allow-untyped-defs
++import itertools
++import os
++import platform
++import re
++import subprocess
++
++
++# lscpu Examples
++# # The following is the parsable format, which can be fed to other
++# # programs. Each different item in every column has an unique ID
++# # starting from zero.
++# CPU NODE SOCKET CORE L1d:L1i:L2:L3 ONLINE    MAXMHZ   MINMHZ      MHZ
++#   0    0      0    0 0:0:0:0          yes 5000.0000 800.0000 2400.000
++#   1    0      0    0 0:0:0:0          yes 5000.0000 800.0000 2400.000
++#   2    0      0    1 0:0:0:0          yes 5000.0000 800.0000 2400.000
++#   3    0      0    1 0:0:0:0          yes 5000.0000 800.0000 2400.000
++#   4    1      1    2 0:0:0:0          yes 5000.0000 800.0000 2400.000
++#   5    1      1    2 0:0:0:0          yes 5000.0000 800.0000 2400.000
++#   6    1      1    3 0:0:0:0          yes 5000.0000 800.0000 2400.000
++#   7    1      1    3 0:0:0:0          yes 5000.0000 800.0000 2400.000
++
++# CPU SOCKET CORE L1d:L1i:L2:L3 ONLINE    MAXMHZ   MINMHZ      MHZ
++#   0      0    0 0:0:0:0          yes 5000.0000 800.0000 2400.000
++#   1      0    0 0:0:0:0          yes 5000.0000 800.0000 2400.000
++#   2      0    1 0:0:0:0          yes 5000.0000 800.0000 2400.000
++#   3      0    1 0:0:0:0          yes 5000.0000 800.0000 2400.000
++#   4      0    2 0:0:0:0          yes 5000.0000 800.0000 2400.000
++#   5      0    2 0:0:0:0          yes 5000.0000 800.0000 2400.000
++#   6      0    3 0:0:0:0          yes 5000.0000 800.0000 2400.000
++#   7      0    3 0:0:0:0          yes 5000.0000 800.0000 2400.000
++
++# CPU NODE SOCKET CORE L1d:L1i:L2:L3 ONLINE    MAXMHZ   MINMHZ      MHZ
++#   0    0      0    0 0:0:0:0          yes 5000.0000 800.0000 2400.000
++#   1    0      0    1 0:0:0:0          yes 5000.0000 800.0000 2400.000
++#   2    1      1    2 0:0:0:0          yes 5000.0000 800.0000 2400.000
++#   3    1      1    3 0:0:0:0          yes 5000.0000 800.0000 2400.000
++#   4    0      0    0 0:0:0:0          yes 5000.0000 800.0000 2400.000
++#   5    0      0    1 0:0:0:0          yes 5000.0000 800.0000 2400.000
++#   6    1      1    2 0:0:0:0          yes 5000.0000 800.0000 2400.000
++#   7    1      1    3 0:0:0:0          yes 5000.0000 800.0000 2400.000
++
++# CPU NODE SOCKET CORE L1d:L1i:L2:L3 ONLINE    MAXMHZ   MINMHZ      MHZ
++#   0    0      0    0 0:0:0:0          yes 5000.0000 800.0000 2400.000
++#   1    0      0    0 0:0:0:0          yes 5000.0000 800.0000 2400.000
++#   2    0      0    1 0:0:0:0          yes 5000.0000 800.0000 2400.000
++#   3    0      0    1 0:0:0:0          yes 5000.0000 800.0000 2400.000
++#   4    0      0    2 0:0:0:0          yes 5000.0000 800.0000 2400.000
++#   5    0      0    2 0:0:0:0          yes 5000.0000 800.0000 2400.000
++#   6    0      0    3 0:0:0:0          yes 5000.0000 800.0000 2400.000
++#   7    0      0    3 0:0:0:0          yes 5000.0000 800.0000 2400.000
++#   8    0      0    4 0:0:0:0          yes 3800.0000 800.0000 2400.000
++#   9    0      0    5 0:0:0:0          yes 3800.0000 800.0000 2400.000
++#  10    0      0    6 0:0:0:0          yes 3800.0000 800.0000 2400.000
++#  11    0      0    7 0:0:0:0          yes 3800.0000 800.0000 2400.000
++
++
++class CoreInfo:
++    """
++    Class to store core-specific information, including:
++    - [int] CPU index
++    - [int] Core index
++    - [int] Numa node index
++    - [int] Socket index
++    - [bool] is a physical core or not
++    - [float] maxmhz
++    - [bool] is a performance core
++    """
++
++    def __init__(self, lscpu_txt="", headers=None) -> None:
++        if headers is None:
++            headers = {}
++        self.cpu = -1
++        self.core = -1
++        self.socket = -1
++        self.node = -1
++        self.is_physical_core = True
++        self.maxmhz = 0.0
++        self.is_p_core = True
++        if lscpu_txt != "" and len(headers) > 0:
++            self.parse_raw(lscpu_txt, headers)
++
++    def parse_raw(self, cols, headers):
++        self.cpu = int(cols[headers["cpu"]])
++        self.core = int(cols[headers["core"]])
++        if "node" in headers:
++            self.node = int(cols[headers["node"]])
++            self.socket = int(cols[headers["socket"]])
++        else:
++            self.node = int(cols[headers["socket"]])
++            self.socket = int(cols[headers["socket"]])
++        if "maxmhz" in headers:
++            self.maxmhz = float(cols[headers["maxmhz"]])
++
++    def __str__(self):
++        return f"{self.cpu}\t{self.core}\t{self.socket}\t{self.node}\t{self.is_physical_core}\t{self.maxmhz}\t{self.is_p_core}"
++
++
++class CPUPool(list):
++    """
++    List of CoreInfo objects
++    """
++
++    def __init__(self) -> None:
++        super().__init__(self)
++
++    def get_ranges(self, l):
++        for a, b in itertools.groupby(enumerate(l), lambda pair: pair[1] - pair[0]):
++            bl = list(b)
++            yield bl[0][1], bl[-1][1]
++
++    def get_pool_txt(self, return_mode="auto"):
++        cpu_ids = [c.cpu for c in self]
++        cpu_ranges = list(self.get_ranges(cpu_ids))
++        cpu_ids_txt = ",".join([str(c) for c in cpu_ids])
++        cpu_ranges_txt = ",".join([f"{r[0]}-{r[1]}" for r in cpu_ranges])
++        node_ids_txt = ",".join(
++            [
++                str(n)
++                for n in sorted(list(set([c.node for c in self])))  # noqa: C414,C403
++            ]
++        )
++        ret = {"cores": "", "nodes": node_ids_txt}
++        if return_mode.lower() == "list":
++            ret["cores"] = cpu_ids_txt
++        elif return_mode.lower() == "range":
++            ret["cores"] = cpu_ranges_txt
++        else:
++            if len(cpu_ids) <= len(cpu_ranges):
++                ret["cores"] = cpu_ids_txt
++            else:
++                ret["cores"] = cpu_ranges_txt
++        return ret
++
++
++class CPUPoolList:
++    """
++    Get a CPU pool with all available CPUs and CPU pools filtered with designated criterias.
++    """
++
++    def __init__(self, logger=None, lscpu_txt="") -> None:
++        self.pool_all = CPUPool()
++        self.pools_ondemand: list[CPUPool] = []
++
++        self.logger = logger
++        if platform.system() == "Linux" and platform.machine() == "x86_64":
++            # Retrieve CPU information from lscpu.
++            if lscpu_txt.strip() == "":
++                args = ["lscpu", "--all", "--extended"]
++                my_env = os.environ.copy()
++                my_env["LC_ALL"] = "C"
++                lscpu_info = subprocess.check_output(
++                    args, env=my_env, universal_newlines=True
++                )
++            else:
++                lscpu_info = lscpu_txt
++
++            # Filter out lines that are really useful.
++            lst_lscpu_info = lscpu_info.strip().split("\n")
++            headers = {}
++            num_cols = 0
++            for line in lst_lscpu_info:
++                line = re.sub(" +", " ", line.lower().strip())
++                if "cpu" in line and "socket" in line and "core" in line:
++                    t = line.split(" ")
++                    num_cols = len(t)
++                    for i in range(num_cols):
++                        if t[i] in ["cpu", "core", "socket", "node", "maxmhz"]:
++                            headers[t[i]] = i
++                else:
++                    t = line.split(" ")
++                    if (
++                        len(t) == num_cols
++                        and t[headers["cpu"]].isdigit()
++                        and t[headers["core"]].isdigit()
++                        and t[headers["socket"]].isdigit()
++                    ):
++                        self.pool_all.append(CoreInfo(t, headers))
++            assert len(self.pool_all) > 0, "cpuinfo is empty"
++        else:
++            raise RuntimeError(f"Unsupported platform {platform.system()}")
++
++        # Determine logical cores
++        core_cur = -1
++        self.pool_all.sort(key=lambda x: (x.core, x.cpu))
++        for c in self.pool_all:
++            if core_cur != c.core:
++                core_cur = c.core
++            else:
++                c.is_physical_core = False
++        self.pool_all.sort(key=lambda x: x.cpu)
++
++        # Determine e cores
++        maxmhzs = list(set([c.maxmhz for c in self.pool_all]))  # noqa: C403
++        maxmhzs.sort()
++        mmaxmhzs = max(maxmhzs)
++        if mmaxmhzs > 0:
++            maxmhzs_norm = [f / mmaxmhzs for f in maxmhzs]
++            separator_idx = -1
++            for i in range(1, len(maxmhzs_norm)):
++                if maxmhzs_norm[i] - maxmhzs_norm[i - 1] >= 0.15:
++                    separator_idx = i
++                    break
++            if separator_idx > -1:
++                e_core_mhzs = maxmhzs[:separator_idx]
++                for c in self.pool_all:
++                    if c.maxmhz in e_core_mhzs:
++                        c.is_p_core = False
++
++    def verbose(self, level, msg, warning_type=None):
++        if self.logger:
++            logging_fn = {
++                "warning": self.logger.warning,
++                "info": self.logger.info,
++            }
++            assert (
++                level in logging_fn.keys()
++            ), f"Unrecognized logging level {level} is detected. Available levels are {logging_fn.keys()}."
++            if warning_type:
++                logging_fn[level](msg, _type=warning_type)
++            else:
++                logging_fn[level](msg)
++        else:
++            print(msg)
++
++    """
++    Generate CPU pools from all available CPU cores with designated criterias.
++    - ninstances [int]:          Number of instances. Should be a non negative integer, 0 by default.
++                                 When it is 0, it will be set according to usage scenarios automatically in the
++                                 function.
++    - ncores_per_instance [int]: Number of cores per instance. Should be a non negative integer, 0 by default.
++                                 When it is 0, it will be set according to usage scenarios automatically in the
++                                 function.
++    - use_logical_cores [bool]:  Use logical cores on the workloads or not, False by default. When set to False,
++                                 only physical cores are used.
++    - use_e_cores [bool]:        Whether to use Efficient-Cores, False by default.
++                                        Efficient-Cores Performance-Cores
++                                  True:        X               X
++                                 False:                        X
++    - bind_numa_node [bool]:     Bind instances to be executed on cores on a single NUMA node, False by default.
++    - strategy [str]:            Instructs how to bind numa nodes. Can be 'close' or 'scatter', 'close' by default.
++                                      Node: | -------------- 0 --------------- | --------------- 1 -------------- |
++                                      Core: 00 01 02 03 04 05 06 07 08 09 10 11 12 13 14 15 16 17 18 19 20 21 22 23
++                                   'close': { --- ins 0 --- } { --- ins 1 --- }
++                                 'scatter': { --- ins 0 --- }                   { --- ins 1 --- }
++    - nodes_list [list]:         A list containing all node ids that the execution is expected to be running on.
++    - cores_list [list]:         A list containing all cpu ids that the execution is expected to be running on.
++    - return_mode [str]:         A string that defines how result values are formed, can be 'auto', 'list' or 'range'.
++                                 'list':  a string with comma-separated cpu ids, '0,1,2,3,...', is returned.
++                                 'range': a string with comma-separated cpu id ranges, '0-2,6-8,...', is returned.
++                                 'auto':  a 'list' or a 'range' whichever has less number of elements that are separated
++                                          by comma is returned. I.e. for a list '0,1,2,6,7,8' and a range '0-2,6-8',
++                                          both reflect the same cpu configuration, the range '0-2,6-8' is returned.
++    """
++
++    def gen_pools_ondemand(
++        self,
++        ninstances=0,
++        ncores_per_instance=0,
++        use_logical_cores=False,
++        use_e_cores=False,
++        bind_numa_node=False,
++        strategy="close",
++        nodes_list=None,
++        cores_list=None,
++        return_mode="auto",
++    ):
++        if nodes_list is None:
++            nodes_list = []
++        if cores_list is None:
++            cores_list = []
++
++        # Generate an aggregated CPU pool
++        if len(cores_list) > 0:
++            cores_available = [c.cpu for c in self.pool_all]
++            assert set(cores_list).issubset(
++                set(cores_available)
++            ), f"Designated cores list {cores_list} contains invalid cores."
++            pool = [c for c in self.pool_all if c.cpu in cores_list]
++        else:
++            if len(nodes_list) > 0:
++                nodes_available = set([c.node for c in self.pool_all])  # noqa: C403
++                assert set(nodes_list).issubset(
++                    nodes_available
++                ), f"Designated nodes list {nodes_list} contains invalid nodes out from {nodes_available}."
++                pool = [c for c in self.pool_all if c.node in nodes_list]
++            else:
++                pool = self.pool_all
++        if not use_logical_cores:
++            pool = [c for c in pool if c.is_physical_core]
++            logical_cores = [c.cpu for c in pool if not c.is_physical_core]
++            if len(logical_cores) > 0:
++                self.verbose(
++                    "info",
++                    f"Logical cores are detected ({logical_cores}). Disabled for performance consideration. "
++                    + "You can enable them with argument --use-logical-cores.",
++                )
++        if not use_e_cores:
++            pool = [c for c in pool if c.is_p_core]
++            e_cores = [c.cpu for c in pool if not c.is_p_core]
++            if len(e_cores) > 0:
++                self.verbose(
++                    "info",
++                    f"Efficient-Cores are detected ({e_cores}). Disabled for performance consideration. "
++                    + "You can enable them with argument --use-e-cores.",
++                )
++
++        # Determine ninstances and ncores_per_instance for grouping
++        assert (
++            ncores_per_instance >= -1
++        ), "Argument --ncores-per-instance cannot be a negative value other than -1."
++        assert ninstances >= 0, "Argument --ninstances cannot be a negative value."
++        pool.sort(key=lambda x: (x.core, 1 - int(x.is_physical_core)))
++        nodes = list(set([c.node for c in pool]))  # noqa: C403
++        is_greedy = False
++        if ncores_per_instance == -1:
++            is_greedy = True
++            ncores_per_instance = 0
++        if ncores_per_instance + ninstances == 0:
++            # Both ncores_per_instance and ninstances are 0
++            ninstances = 1
++
++        rst = []
++        if ncores_per_instance == 0:
++            pool_process = []
++            ninstances_node = []
++            if bind_numa_node:
++                for node in nodes:
++                    pool_node = [c for c in pool if c.node == node]
++                    pool_process.append(pool_node)
++                    ninstances_local = (ninstances * len(pool_node)) // len(pool)
++                    if (ninstances_local) == 0 or (
++                        (ninstances * len(pool_node)) % len(pool) > 0
++                    ):
++                        ninstances_local += 1
++                    ninstances_node.append(ninstances_local)
++                for _ in range(int(sum(ninstances_node)) - ninstances):
++                    ncores_per_instance_local = []
++                    for i in range(len(nodes)):
++                        ncores_node = len([c for c in pool if c.node == nodes[i]])
++                        tmp = ncores_node / ninstances_node[i]
++                        if ninstances_node[i] == 1:
++                            tmp = len(pool)
++                        ncores_per_instance_local.append(tmp)
++                    ncores_per_instance_local_min = min(ncores_per_instance_local)
++                    if ncores_per_instance_local_min == len(pool):
++                        break
++                    index = ncores_per_instance_local.index(
++                        ncores_per_instance_local_min
++                    )
++                    ninstances_node[index] -= 1
++                delta = int(sum(ninstances_node)) - ninstances
++                if delta > 0:
++                    ncores_per_instance_local = []
++                    for i in range(len(nodes)):
++                        ncores_per_instance_local.append(
++                            {
++                                "index": i,
++                                "count": len([c for c in pool if c.node == nodes[i]]),
++                            }
++                        )
++                    ncores_per_instance_local.sort(
++                        key=lambda x: (x["count"], len(nodes) - x["index"])
++                    )
++                    for i in range(delta):
++                        ninstances_node[ncores_per_instance_local[i]["index"]] -= 1
++            else:
++                pool_process.append(pool)
++                ninstances_node.append(ninstances)
++            for i in range(len(pool_process)):
++                p = pool_process[i]
++                n = ninstances_node[i]
++                if n == 0:
++                    continue
++                tmp = []
++                for j in range(n):
++                    tmp.append({"ncores": len(p) // n, "pool": []})
++                if is_greedy:
++                    ncores_residual = len(p) % n
++                    for j in range(ncores_residual):
++                        tmp[j]["ncores"] += 1
++                ncores_assigned = 0
++                for j in range(len(tmp)):
++                    tmp[j]["pool"] = p[
++                        ncores_assigned : ncores_assigned + tmp[j]["ncores"]
++                    ]
++                    ncores_assigned += tmp[j]["ncores"]
++                rst += tmp
++        else:
++            pool_process = []
++            if bind_numa_node:
++                for node in nodes:
++                    pool_process.append([c for c in pool if c.node == node])
++            else:
++                pool_process.append(pool)
++            for i in range(len(pool_process)):
++                p = pool_process[i]
++                n = len(p) // ncores_per_instance
++                ncores_assigned = 0
++                for _ in range(n):
++                    item = {"ncores": 0, "node": nodes[i], "pool": []}
++                    item["ncores"] = ncores_per_instance
++                    item["pool"] = p[
++                        ncores_assigned : ncores_assigned + ncores_per_instance
++                    ]
++                    ncores_assigned += ncores_per_instance
++                    rst.append(item)
++            if ninstances > 0:
++                assert ninstances <= len(rst), (
++                    f"Requested --ninstances ({ninstances}) and --ncores_per_instance ({ncores_per_instance}) "
++                    + "combination is not supported. Please adjust either or both of these 2 parameters and try again."
++                )
++                if ninstances < len(rst):
++                    if strategy == "close":
++                        rst = rst[:ninstances]
++                    elif strategy == "scatter":
++                        if len(pool_process) == 1:
++                            step = len(rst) // ninstances
++                            if len(rst) % ninstances > 0:
++                                step += 1
++                            rst = rst[::step]
++                        else:
++                            rst_map = []
++                            ninstances_node_avai = []
++                            ninstances_node = []
++                            for node in nodes:
++                                tmp = [r for r in rst if r["node"] == node]
++                                rst_map.append(tmp)
++                                ninstances_node_avai.append(len(tmp))
++                                ninstances_node.append(0)
++                            index = 0
++                            for _ in range(ninstances):
++                                while index < len(nodes):
++                                    index += 1
++                                    if index == len(nodes):
++                                        index = 0
++                                    if ninstances_node_avai[index - 1] > 0:
++                                        ninstances_node[index - 1] += 1
++                                        ninstances_node_avai[index - 1] -= 1
++                                        break
++                            rst.clear()
++                            for i in range(len(ninstances_node)):
++                                rst += rst_map[i][: ninstances_node[i]]
++                    else:
++                        raise ValueError(f"Strategy {strategy} is not available.")
++
++        # Split the aggregated pool into individual pools
++        self.pools_ondemand.clear()
++        for item in rst:
++            # Generate individual raw pool
++            pool_local = CPUPool()
++            for c in item["pool"]:
++                pool_local.append(c)
++            pool_local.sort(key=lambda x: x.cpu)
++            self.pools_ondemand.append(pool_local)
+diff --git a/torch/backends/xeon/_launcher_base.py b/torch/backends/xeon/_launcher_base.py
+new file mode 100644
+index 00000000000000..1c39a06aaac690
+--- /dev/null
++++ b/torch/backends/xeon/_launcher_base.py
+@@ -0,0 +1,329 @@
++# mypy: allow-untyped-defs
++import glob
++import os
++from os.path import expanduser
++
++from ._cpu_info import CPUPoolList
++
++
++class Launcher:
++    """
++    Base class for launcher
++    """
++
++    def __init__(self, logger=None, lscpu_txt=""):
++        self.logger = logger
++        self.cpuinfo = CPUPoolList(self.logger, lscpu_txt)
++        self.library_paths = []
++        if "CONDA_PREFIX" in os.environ:
++            self.library_paths.append(f'{os.environ["CONDA_PREFIX"]}/lib/')
++        if "VIRTUAL_ENV" in os.environ:
++            self.library_paths.append(f'{os.environ["VIRTUAL_ENV"]}/lib/')
++        self.library_paths.extend(
++            [
++                f'{expanduser("~")}/.local/lib/',
++                "/usr/local/lib/",
++                "/usr/local/lib64/",
++                "/usr/lib/",
++                "/usr/lib64/",
++                "/usr/lib/x86_64-linux-gnu/",
++            ]
++        )
++        self.ma_supported = ["auto", "default", "tcmalloc", "jemalloc"]
++        self.omp_supported = ["auto", "default", "intel"]
++        self.strategy_supported = ["scatter", "close"]
++        self.environ_set = {}
++        self.ld_preload = (
++            os.environ["LD_PRELOAD"].split(":") if "LD_PRELOAD" in os.environ else []
++        )
++
++    def add_common_params(self, parser):
++        group = parser.add_argument_group("Launcher Common Arguments")
++        group.add_argument(
++            "--ncores-per-instance",
++            "--ncores_per_instance",
++            default=0,
++            type=int,
++            help="Number of cores used for computation per instance. It has to be an integer larger than -1. "
++            + "When set to 0, cores are evenly assigned to each instance. If number of cores cannot be divided "
++            + "by number of instances, residual cores are unused. When set to -1, cores are evenly assigned to "
++            + "each instance as much as possible to fully utilize all cores. When set to a number larger than 0, "
++            + "designated number of cores are assigned to each instance.",
++        )
++        group.add_argument(
++            "--nodes-list",
++            "--nodes_list",
++            default="",
++            type=str,
++            help="Specify nodes list for multiple instances to run on, in format of list of single node ids "
++            + '"node_id,node_id,..." or list of node ranges "node_id-node_id,...". By default all nodes will be used.',
++        )
++        group.add_argument(
++            "--use-e-cores",
++            "--use_e_cores",
++            action="store_true",
++            default=False,
++            help="Use Efficient-Cores on the workloads or not. By default, only Performance-Cores are used.",
++        )
++        group.add_argument(
++            "--strategy",
++            default="scatter",
++            type=str,
++            choices=self.strategy_supported,
++            help="Tell how cores are distributed over instances when only part of all cores are needed on a "
++            + f'machine with multiple NUMA nodes. Supported choices are {self.strategy_supported}. With "scatter", '
++            + "instances are distributed evenly as much as possible over all available NUMA nodes. While with "
++            + '"close", instances are assigned to cores in order continuously.',
++        )
++        group.add_argument(
++            "--memory-allocator",
++            "--memory_allocator",
++            default="auto",
++            type=str,
++            choices=self.ma_supported,
++            help=f"Choose which memory allocator to run the workloads with. Supported choices are {self.ma_supported}.",
++        )
++        group.add_argument(
++            "--omp-runtime",
++            "--omp_runtime",
++            default="auto",
++            type=str,
++            choices=self.omp_supported,
++            help=f"Choose which OpenMP runtime to run the workloads with. Supported choices are {self.omp_supported}.",
++        )
++
++    def verbose(self, level, msg):
++        if self.logger:
++            logging_fn = {
++                "warning": self.logger.warning,
++                "info": self.logger.info,
++            }
++            assert (
++                level in logging_fn.keys()
++            ), f"Unrecognized logging level {level} is detected. Available levels are {logging_fn.keys()}."
++            logging_fn[level](msg)
++        else:
++            print(msg)
++
++    def launch(self, args):
++        pass
++
++    def add_lib_preload(self, lib_type):
++        """
++        Enable TCMalloc/JeMalloc/intel OpenMP
++        """
++        lib_found = False
++        lib_set = False
++        for item in self.ld_preload:
++            if item.endswith(f"lib{lib_type}.so"):
++                lib_set = True
++                break
++        if not lib_set:
++            for lib_path in self.library_paths:
++                if lib_path.endswith("/"):
++                    lib_path = lib_path[:-1]
++                library_file = f"{lib_path}/lib{lib_type}.so"
++                matches = glob.glob(library_file)
++                if len(matches) > 0:
++                    self.ld_preload.append(matches[0])
++                    lib_found = True
++                    break
++        return lib_set or lib_found
++
++    def check_env(self, env_name, env_value):
++        value = os.getenv(env_name, "")
++        if value != "" and value != env_value:
++            self.verbose(
++                "warning",
++                f"{env_name} in environment variable is {os.environ[env_name]} while the value you would like to set"
++                + f" is {env_value}. Use the exsiting value. Please unset the {env_name} if you wish ipex launcher set it ",
++            )
++            return os.environ[env_name]
++        else:
++            return env_value
++
++    def add_env(self, env_name, env_value):
++        self.environ_set[env_name] = self.check_env(env_name, env_value)
++
++    def set_lib_bin_from_list(
++        self,
++        name_input,
++        name_map,
++        category,
++        supported,
++        fn,
++        skip_list=None,
++        extra_warning_msg_with_default_choice="",
++    ):
++        """
++        Function to set libraries or commands that are predefined in support lists.
++        The support list is formed in format ['auto', default choice, alternative A, alternative B, ...].
++        The list can only contain 'auto' and the default choice.
++        Arguments:
++            name_input:  name of the lib/bin that user inputs.
++            name_map:    dictionary. {'key': ['alias name', 'package installation command']}
++                         e.g. {'intel': ['iomp5', 'conda install intel-openmp']}. When user passes 'intel' (key) to
++                         omp_runtime to look for openMP dynamic library files, the function passed via argument 'fn'
++                         looks for 'libiomp5.so'(formed from 'alias name') in predefined search paths. If not found,
++                         the 'package installation command' will be printed.
++            category:    category of this lib/bin. 'OpenMP runtime', 'memory allocator', 'multi-task manager', etc.
++            supported:   predefined supported elements list
++            fn:          function how lib/bin files are searched. Return True for a successful search, otherwise False.
++            skip_list:   list containing name of lib/bin that will not be used.
++            extra_warning_msg_with_default_choice: warning message that will be prompted if designated choices
++                                                   are not available and fallen back to the default choice.
++        """
++        if skip_list is None:
++            skip_list = []
++        name_local = name_input.lower()
++        if name_local not in supported:
++            name_local = supported[0]
++            self.verbose(
++                "warning",
++                f"Designated {category} '{name_input}' is unknown. Changing it to '{name_local}'."
++                + f"Supported {category} are {supported}.",
++            )
++        if name_local in skip_list:
++            name_local = supported[0]
++            self.verbose(
++                "warning",
++                f"Designated {category} '{name_input}' is not applicable at this moment. Changing it to '{name_local}'."
++                + f"Please choose another {category} from {supported}.",
++            )
++        if name_local == supported[0]:
++            self.verbose("info", f"auto choosing {category}...")
++            for name in supported[2:]:
++                if name in skip_list:
++                    continue
++                if fn(name_map[name][0]):
++                    self.verbose("info", f"Use '{name_local}' => '{name}' {category}.")
++                    name_local = name
++                    break
++            if name_local == supported[0]:
++                name_local = supported[1]
++                if len(supported[2:]) > 0:
++                    msg = ""
++                    if len(supported[2:]) == 1:
++                        msg = f"'{supported[2]}' {category} is not found"
++                    elif len(supported[2:]) < 3:
++                        msg = f"Neither of {supported[2:]} {category} is found"
++                    else:
++                        msg = f"None of {supported[2:]} {category} is found"
++                    self.verbose("info", f"{msg} in {self.library_paths}.")
++                if extra_warning_msg_with_default_choice != "":
++                    extra_warning_msg_with_default_choice = (
++                        f" {extra_warning_msg_with_default_choice}"
++                    )
++                self.verbose(
++                    "info",
++                    f"Use '{name_local}' {category}.{extra_warning_msg_with_default_choice}",
++                )
++        elif name_local in supported[2:]:
++            if not fn(name_map[name_local][0]):
++                extra_warning_msg_install_guide = ""
++                if name_map[name_local][1] != "":
++                    extra_warning_msg_install_guide = (
++                        f' You can install it with "{name_map[name_local][1]}".'
++                    )
++                self.verbose(
++                    "warning",
++                    f"Unable to find the '{name_local}' {category} library file in"
++                    + f"{self.library_paths}.{extra_warning_msg_install_guide}",
++                )
++                name_local = supported[1]
++                if extra_warning_msg_with_default_choice != "":
++                    extra_warning_msg_with_default_choice = (
++                        f" {extra_warning_msg_with_default_choice}"
++                    )
++                self.verbose(
++                    "info",
++                    f"Use '{name_local}' {category}.{extra_warning_msg_with_default_choice}",
++                )
++            else:
++                self.verbose("info", f"Use '{name_local}' {category}.")
++        else:
++            self.verbose("info", f"Use '{name_local}' {category}.")
++        if fn == self.add_lib_preload:
++            for k, v in name_map.items():
++                if k == name_local:
++                    continue
++                for item in self.ld_preload:
++                    if item.endswith(f"lib{v[0]}.so"):
++                        self.ld_preload.remove(item)
++        return name_local
++
++    def set_memory_allocator(
++        self, memory_allocator="auto", benchmark=False, skip_list=None
++    ):
++        """
++        Enable TCMalloc/JeMalloc with LD_PRELOAD and set configuration for JeMalloc.
++        By default, PTMalloc will be used for PyTorch, but TCMalloc and JeMalloc can get better
++        memory resue and reduce page fault to improve performance.
++        """
++        if skip_list is None:
++            skip_list = []
++        ma_lib_name = {
++            "jemalloc": ["jemalloc", "conda install -c conda-forge jemalloc"],
++            "tcmalloc": ["tcmalloc", "conda install -c conda-forge gperftools"],
++        }
++        ma_local = self.set_lib_bin_from_list(
++            memory_allocator,
++            ma_lib_name,
++            "memory allocator",
++            self.ma_supported,
++            self.add_lib_preload,
++            skip_list=skip_list,
++            extra_warning_msg_with_default_choice="This may drop the performance.",
++        )
++        if ma_local == "jemalloc":
++            if benchmark:
++                self.add_env(
++                    "MALLOC_CONF",
++                    "oversize_threshold:1,background_thread:false,metadata_thp:always,dirty_decay_ms:-1,muzzy_decay_ms:-1",
++                )
++            else:
++                self.add_env(
++                    "MALLOC_CONF",
++                    "oversize_threshold:1,background_thread:true,metadata_thp:auto",
++                )
++        return ma_local
++
++    def set_omp_runtime(self, omp_runtime="auto", set_kmp_affinity=True):
++        """
++        Set OpenMP runtime
++        """
++        omp_lib_name = {"intel": ["iomp5", "conda install intel-openmp"]}
++        omp_local = self.set_lib_bin_from_list(
++            omp_runtime,
++            omp_lib_name,
++            "OpenMP runtime",
++            self.omp_supported,
++            self.add_lib_preload,
++        )
++        if omp_local == "intel":
++            if set_kmp_affinity:
++                self.add_env("KMP_AFFINITY", "granularity=fine,compact,1,0")
++            self.add_env("KMP_BLOCKTIME", "1")
++        elif omp_local == "default":
++            self.add_env("OMP_SCHEDULE", "STATIC")
++            self.add_env("OMP_PROC_BIND", "CLOSE")
++        return omp_local
++
++    def parse_list_argument(self, txt):
++        ret = []
++        txt = txt.strip()
++        if txt != "":
++            for elem in txt.split(","):
++                elem = elem.strip()
++                if elem.isdigit():
++                    ret.append(int(elem))
++                else:
++                    core_range = [int(x.strip()) for x in elem.split("-")]
++                    assert len(core_range) == 2, "Invalid range format detected."
++                    begin, end = core_range
++                    assert (
++                        begin <= end
++                    ), "Begining index of a range must be <= ending index."
++                    ret.extend(list(range(begin, end + 1)))
++        ret = list(set(ret))
++        return ret
+diff --git a/torch/backends/xeon/_launcher_multi_instances.py b/torch/backends/xeon/_launcher_multi_instances.py
+new file mode 100644
+index 00000000000000..b92704009a2e6a
+--- /dev/null
++++ b/torch/backends/xeon/_launcher_multi_instances.py
+@@ -0,0 +1,337 @@
++# mypy: allow-untyped-defs
++import os
++import subprocess
++import sys
++from typing import Dict
++
++from torch.distributed.elastic.multiprocessing import (
++    DefaultLogsSpecs as _DefaultLogsSpecs,
++    start_processes,
++    Std,
++)
++
++from ._launcher_base import Launcher
++
++
++class MultiInstancesLauncher(Launcher):
++    def __init__(self, logger=None, lscpu_txt=""):
++        super().__init__(logger, lscpu_txt)
++        self.tm_supported = ["auto", "none", "numactl", "taskset"]
++
++    def add_params(self, parser):
++        group = parser.add_argument_group("Multi-instance Arguments")
++        group.add_argument(
++            "--ninstances",
++            default=0,
++            type=int,
++            help="Number of instances",
++        )
++        group.add_argument(
++            "--instance-idx",
++            "--instance_idx",
++            default="",
++            type=str,
++            help="Inside the multi instance list, execute a specific instance at indices. "
++            + "If it is set to -1 or empty, run all of them.",
++        )
++        group.add_argument(
++            "--use-logical-cores",
++            "--use_logical_cores",
++            action="store_true",
++            default=False,
++            help="Use logical cores on the workloads or not. By default, only physical cores are used.",
++        )
++        group.add_argument(
++            "--bind-numa-node",
++            "--bind_numa_node",
++            action="store_true",
++            default=False,
++            help="Bind instances to be executed on cores on a single NUMA node.",
++        )
++        group.add_argument(
++            "--multi-task-manager",
++            "--multi_task_manager",
++            default="auto",
++            type=str,
++            choices=self.tm_supported,
++            help="Choose which multi task manager to run the workloads with. Supported choices are {self.tm_supported}.",
++        )
++        group.add_argument(
++            "--latency-mode",
++            "--latency_mode",
++            action="store_true",
++            default=False,
++            help="Use 4 cores per instance over all physical cores.",
++        )
++        group.add_argument(
++            "--throughput-mode",
++            "--throughput_mode",
++            action="store_true",
++            default=False,
++            help="Run one instance per node with all physical cores.",
++        )
++        group.add_argument(
++            "--cores-list",
++            "--cores_list",
++            default="",
++            type=str,
++            help="Specify cores list for multiple instances to run on, in format of list of single core ids "
++            + '"core_id,core_id,..." or list of core ranges "core_id-core_id,...". '
++            + "By default all cores will be used.",
++        )
++        group.add_argument(
++            "--benchmark",
++            action="store_true",
++            default=False,
++            help="Enable benchmark config. JeMalloc's MALLOC_CONF has been tuned for low latency. "
++            + "Recommend to use this for benchmarking purpose; for other use cases, "
++            + "this MALLOC_CONF may cause Out-of-Memory crash.",
++        )
++
++    def is_command_available(self, cmd):
++        is_available = False
++        try:
++            cmd_s = ["which", cmd]
++            r = subprocess.run(
++                cmd_s,
++                env=os.environ,
++                stdout=subprocess.DEVNULL,
++                stderr=subprocess.DEVNULL,
++            )
++            if r.returncode == 0:
++                is_available = True
++        except FileNotFoundError as e:
++            pass
++        return is_available
++
++    def set_multi_task_manager(self, multi_task_manager="auto", skip_list=None):
++        if skip_list is None:
++            skip_list = []
++        tm_bin_name = {
++            "numactl": ["numactl", ""],
++            "taskset": ["taskset", ""],
++        }
++        tm_local = self.set_lib_bin_from_list(
++            multi_task_manager,
++            tm_bin_name,
++            "multi-task manager",
++            self.tm_supported,
++            self.is_command_available,
++            skip_list,
++        )
++        return tm_local
++
++    def execution_command_builder(
++        self, entrypoint, args, omp_runtime, task_mgr, environ, cpu_pools, index
++    ):
++        assert index > -1 and index <= len(
++            cpu_pools
++        ), "Designated instance index for constructing execution commands is out of range."
++        cmd = []
++        environ_local = environ.copy()
++        pool = cpu_pools[index]
++        pool_txt = pool.get_pool_txt()
++        cores_list_local = pool_txt["cores"]
++        nodes_list_local = pool_txt["nodes"]
++        self.verbose("info", f"========== instance {index} ==========")
++        if task_mgr != self.tm_supported[1]:
++            params = ""
++            if task_mgr == "numactl":
++                params = f"-C {cores_list_local} "
++                params += f"-m {nodes_list_local}"
++            elif task_mgr == "taskset":
++                params = f"-c {cores_list_local}"
++            cmd.append(task_mgr)
++            cmd.extend(params.split())
++        else:
++            k = ""
++            v = ""
++            if omp_runtime == "default":
++                k = "GOMP_CPU_AFFINITY"
++                v = cores_list_local
++            elif omp_runtime == "intel":
++                k = "KMP_AFFINITY"
++                v = f"granularity=fine,proclist=[{cores_list_local}],explicit"
++            if k != "":
++                self.verbose("info", f"env: {k}={v}")
++                environ_local[k] = v
++        omp_num_threads = self.check_env("OMP_NUM_THREADS", len(pool))
++        environ_local["OMP_NUM_THREADS"] = str(omp_num_threads)
++        self.verbose("info", f"env: OMP_NUM_THREADS={omp_num_threads}")
++
++        with_python = not args.no_python
++        if with_python:
++            cmd.append(sys.executable)
++            cmd.append("-u")
++        if args.module:
++            cmd.append("-m")
++        cmd.append(args.program)
++        cmd.extend(args.program_args)
++        cmd_s = " ".join(cmd)
++        self.verbose("info", f"cmd: {cmd_s}")
++        if entrypoint == "":
++            entrypoint = cmd[0]
++        del cmd[0]
++        if len(set([c.node for c in pool])) > 1:  # noqa: C403
++            self.verbose(
++                "warning",
++                f"Cross NUMA nodes execution detected: cores [{cores_list_local}] are on different NUMA nodes [{nodes_list_local}]",
++            )
++        return entrypoint, tuple(cmd), environ_local, Std.ALL
++
++    def launch(self, args):
++        # check whether is launched from torchrun with --nproc-per-node <num workers>
++        local_size = int(os.environ.get("LOCAL_WORLD_SIZE", 0))
++        local_rank = int(os.environ.get("LOCAL_RANK", -1))
++        if local_size > 0 and local_rank > -1:
++            self.verbose(
++                "info",
++                "Overwrite arguments ninstances and instance_idx by values set by "
++                + "environment variables LOCAL_WORLD_SIZE and LOCAL_RANK.",
++            )
++            args.ninstances = local_size
++            args.instance_idx = str(local_rank)
++
++        if args.latency_mode and args.throughput_mode:
++            raise RuntimeError(
++                "Argument latency_mode and throughput_mode cannot be set at the same time."
++            )
++        if args.latency_mode:
++            if (
++                args.ninstances > 0
++                or args.ncores_per_instance > 0
++                or len(args.nodes_list) > 0
++                or args.use_logical_cores
++            ):
++                self.verbose(
++                    "warning",
++                    "--latency-mode is exclusive to --ninstances, --ncores-per-instance, --nodes-list and"
++                    + "--use-logical-cores. They won't take effect even if they are set explicitly.",
++                )
++            args.ncores_per_instance = 4
++            args.ninstances = 0
++            args.use_logical_cores = False
++        if args.throughput_mode:
++            if (
++                args.ninstances > 0
++                or args.ncores_per_instance > 0
++                or len(args.nodes_list) > 0
++                or args.use_logical_cores
++            ):
++                self.verbose(
++                    "warning",
++                    "--throughput-mode is exclusive to --ninstances, --ncores-per-instance, --nodes-list and"
++                    + "--use-logical-cores. They won't take effect even if they are set explicitly.",
++                )
++            args.ninstances = len(
++                set([c.node for c in self.cpuinfo.pool_all])  # noqa: C403
++            )
++            args.ncores_per_instance = 0
++            args.use_logical_cores = False
++
++        cores_list = self.parse_list_argument(args.cores_list)
++        nodes_list = self.parse_list_argument(args.nodes_list)
++
++        self.cpuinfo.gen_pools_ondemand(
++            ninstances=args.ninstances,
++            ncores_per_instance=args.ncores_per_instance,
++            use_logical_cores=args.use_logical_cores,
++            use_e_cores=args.use_e_cores,
++            bind_numa_node=args.bind_numa_node,
++            nodes_list=nodes_list,
++            cores_list=cores_list,
++            strategy=args.strategy,
++        )
++        args.ninstances = len(self.cpuinfo.pools_ondemand)
++
++        is_iomp_set = False
++        for item in self.ld_preload:
++            if item.endswith("libiomp5.so"):
++                is_iomp_set = True
++                break
++        is_kmp_affinity_set = True if "KMP_AFFINITY" in os.environ else False
++        set_kmp_affinity = True
++        # When using all cores on all nodes, including logical cores, setting KMP_AFFINITY disables logical cores.
++        #   Thus, KMP_AFFINITY should not be set.
++        if args.use_logical_cores and len(
++            set([c for p in self.cpuinfo.pools_ondemand for c in p])  # noqa: C403
++        ) == len(self.cpuinfo.pool_all):
++            assert (
++                not is_kmp_affinity_set
++            ), 'Environment variable "KMP_AFFINITY" is detected. Please unset it when using all cores.'
++            set_kmp_affinity = False
++
++        self.set_memory_allocator(args.memory_allocator, args.benchmark)
++        omp_runtime = self.set_omp_runtime(args.omp_runtime, set_kmp_affinity)
++
++        skip_list = []
++        if is_iomp_set and is_kmp_affinity_set:
++            skip_list.append("numactl")
++        task_mgr = self.set_multi_task_manager(
++            args.multi_task_manager, skip_list=skip_list
++        )
++
++        # Set environment variables for multi-instance execution
++        self.verbose(
++            "info", "env: Untouched preset environment variables are not displayed."
++        )
++        environ_local = {}
++        for k, v in os.environ.items():
++            if k == "LD_PRELOAD":
++                continue
++            environ_local[k] = v
++        if len(self.ld_preload) > 0:
++            environ_local["LD_PRELOAD"] = ":".join(self.ld_preload)
++            self.verbose("info", f'env: LD_PRELOAD={environ_local["LD_PRELOAD"]}')
++        for k, v in self.environ_set.items():
++            if task_mgr == self.tm_supported[1]:
++                if omp_runtime == "default" and k == "GOMP_CPU_AFFINITY":
++                    continue
++                if omp_runtime == "intel" and k == "KMP_AFFINITY":
++                    continue
++            self.verbose("info", f"env: {k}={v}")
++            environ_local[k] = v
++
++        instances_available = list(range(args.ninstances))
++        instance_idx = self.parse_list_argument(args.instance_idx)
++        if -1 in instance_idx:
++            instance_idx.clear()
++        if len(instance_idx) == 0:
++            instance_idx.extend(instances_available)
++        instance_idx.sort()
++        instance_idx = list(set(instance_idx))
++        assert set(instance_idx).issubset(
++            set(instances_available)
++        ), "Designated nodes list contains invalid nodes."
++
++        entrypoint = ""
++        launch_args = {}
++        launch_envs: Dict[int, Dict] = {}
++        launch_tee = {}
++        for i in range(len(instance_idx)):
++            (
++                entrypoint,
++                launchargs,
++                launchenvs,
++                launchtee,
++            ) = self.execution_command_builder(
++                entrypoint=entrypoint,
++                args=args,
++                omp_runtime=omp_runtime,
++                task_mgr=task_mgr,
++                environ=environ_local,
++                cpu_pools=self.cpuinfo.pools_ondemand,
++                index=instance_idx[i],
++            )
++            launch_args[i] = launchargs
++            launch_envs[i] = launchenvs
++            launch_tee[i] = launchtee
++
++        ctx = start_processes(
++            name=args.log_file_prefix,
++            entrypoint=entrypoint,
++            args=launch_args,
++            envs=launch_envs,
++            logs_specs=_DefaultLogsSpecs(log_dir=args.log_dir, tee=launch_tee),
++        )
++        ctx.wait()
+diff --git a/torch/backends/xeon/run_cpu.py b/torch/backends/xeon/run_cpu.py
+index a701d10eb5601f..80ea5e1f9bda96 100644
+--- a/torch/backends/xeon/run_cpu.py
++++ b/torch/backends/xeon/run_cpu.py
+@@ -1,6 +1,6 @@
+ # mypy: allow-untyped-defs
+ """
+-This is a script for launching PyTorch inference on Intel(R) Xeon(R) Scalable Processors with optimal configurations.
++This is a script for launching PyTorch inference on Intel® Xeon® Scalable Processors with optimal configurations.
+ 
+ Single instance inference, multi-instance inference are enabled.
+ 
+@@ -8,26 +8,28 @@
+ multiple "instances" which are formed from multiple threads for each. "instance" is kind of group of threads in this
+ context.
+ 
++Command `torch-xeon-launcher` is equivalent to `python -m torch.backends.xeon.run_cpu`.
++
+ Illustrated as below:
+ 
+ ::
+ 
+-    +-----------------------------+----------------------+-------+
+-    |            process          |        thread        | core  |
+-    +=============================+======================+=======+
+-    | torch.backends.xeon.run_cpu | instance 0: thread 0 |   0   |
+-    |                             |             thread 1 |   1   |
+-    |                             +----------------------+-------+
+-    |                             | instance 1: thread 0 |   2   |
+-    |                             |             thread 1 |   3   |
+-    |                             +----------------------+-------+
+-    |                             | ...                  |  ...  |
+-    |                             +----------------------+-------+
+-    |                             | instance N: thread 0 |   M   |
+-    |                             |             thread 1 |  M+1  |
+-    +-----------------------------+----------------------+-------+
+-
+-To get the peak performance on Intel(R) Xeon(R) Scalable Processors, the script optimizes the configuration of thread and memory
++    +---------------------+----------------------+-------+
++    |        process      |        thread        | core  |
++    +=====================+======================+=======+
++    | torch-xeon-launcher | instance 0: thread 0 |   0   |
++    |                     |             thread 1 |   1   |
++    |                     +----------------------+-------+
++    |                     | instance 1: thread 0 |   2   |
++    |                     |             thread 1 |   3   |
++    |                     +----------------------+-------+
++    |                     | ...                  |  ...  |
++    |                     +----------------------+-------+
++    |                     | instance N: thread 0 |   M   |
++    |                     |             thread 1 |  M+1  |
++    +---------------------+----------------------+-------+
++
++To get the peak performance on Intel® Xeon® Scalable Processors, the script optimizes the configuration of thread and memory
+ management. For thread management, the script configures thread affinity and the preload of Intel OMP library.
+ For memory management, it configures NUMA binding and preload optimized memory allocation library (e.g. tcmalloc, jemalloc).
+ 
+@@ -52,8 +54,82 @@
+ *Note*: This script respects environment variables set preliminarily. I.e. If you set the environment variables
+ mentioned above before running the script, the script will not overwrite the values in the script.
+ 
+-How to use this module:
+-~~~~~~~~~~~~~~~~~~~~~~~
++Arguments:
++~~~~~~~~~~
++
+++-------------------------+------+-----------+-----------------------------------------------------------------------+
++|        Arguments        | Type |  Default  | Description                                                           |
+++=========================+======+===========+=======================================================================+
++| `-h`, `--help`          |  --  |    --     | Show this help message and exit                                       |
+++-------------------------+------+-----------+-----------------------------------------------------------------------+
++| `-m`, `--module`        |  --  |   False   | Changes each process to interpret the launch script  as a python      |
++|                         |      |           | module, executing with the same behavior as 'python -m'.              |
+++-------------------------+------+-----------+-----------------------------------------------------------------------+
++| `--no-python`           |  --  |   False   | Avoid applying `python` to execute `program`.                         |
+++-------------------------+------+-----------+-----------------------------------------------------------------------+
++| `--log-dir`             | str  |    ''     | The log file directory. Setting it to empty ('') disables logging to  |
++|                         |      |           | files.                                                                |
+++-------------------------+------+-----------+-----------------------------------------------------------------------+
++| `--log-file-prefix`     | str  |   'run'   | Log file name prefix                                                  |
+++-------------------------+------+-----------+-----------------------------------------------------------------------+
++| `--ninstances`          | int  |     0     | Number of instances                                                   |
+++-------------------------+------+-----------+-----------------------------------------------------------------------+
++|                         |      |           | Inside the multi instance list, execute specific instances at indice  |
++| `--instance-idx`        | str  |    -1     | (count from 0, separate by comma(,)). If it is set to -1, run all of  |
++|                         |      |           | instances. If it is set to an individual number, run the instance at  |
++|                         |      |           | that specific index.                                                  |
+++-------------------------+------+-----------+-----------------------------------------------------------------------+
++|                         |      |           | Number of cores per instance. It has to be an integer larger than or  |
++|                         |      |           | equal to `-1`. When set to `0`, cores are evenly assigned to each     |
++|                         |      |           | instance. If number of cores cannot be divided by number of instances,|
++| `--ncores-per-instance` | int  |     0     | residual cores are unused. When set to `-1`, cores are evenly assigned|
++|                         |      |           | to each instance as much as possible to fully utilize all cores. When |
++|                         |      |           | set to a number larger than `0`, designated number of cores are       |
++|                         |      |           | assigned to each instance.                                            |
+++-------------------------+------+-----------+-----------------------------------------------------------------------+
++|                         |      |           | Specify nodes list for multiple instances to run on, in format of list|
++| `--nodes-list`          | str  |    ''     | of single node ids "node_id,node_id,..." or list of node ranges       |
++|                         |      |           | "node_id-node_id,...". By default all nodes will be used.             |
+++-------------------------+------+-----------+-----------------------------------------------------------------------+
++|                         |      |           | Specify cores list for multiple instances to run on, in format of list|
++| `--cores-list`          | str  |    ''     | of single core ids "core_id,core_id,..." or list of core ranges       |
++|                         |      |           | "core_id-core_id,...". By default all cores will be used.             |
+++-------------------------+------+-----------+-----------------------------------------------------------------------+
++| `--use-logical-cores`   |  --  |   False   | Use logical cores on the workloads or not. By default, only physical  |
++|                         |      |           | cores are used.                                                       |
+++-------------------------+------+-----------+-----------------------------------------------------------------------+
++| `--use-e-cores`         |  --  |   False   | Use Efficient-Cores on the workloads or not. By default, only         |
++|                         |      |           | Performance-Cores are used.                                           |
+++-------------------------+------+-----------+-----------------------------------------------------------------------+
++| `--memory-allocator`    | str  |   'auto'  | Choose which memory allocator to run the workloads with.              |
++|                         |      |           | Supported choices are ['auto', 'default', 'tcmalloc', 'jemalloc'].    |
+++-------------------------+------+-----------+-----------------------------------------------------------------------+
++| `--omp-runtime`         | str  |   'auto'  | Choose which OpenMP runtime to run the workloads with.                |
++|                         |      |           | Supported choices are ['auto', 'default', 'intel'].                   |
+++-------------------------+------+-----------+-----------------------------------------------------------------------+
++| `--multi-task-manager`  | str  |   'auto'  | Choose which multi task manager to run the workloads with.            |
++|                         |      |           | Supported choices are ['auto', 'none', 'numactl', 'taskset'].         |
+++-------------------------+------+-----------+-----------------------------------------------------------------------+
++| `--bind-numa-node`      |  --  |   False   | Bind instances to be executed on cores on a single NUMA node.         |
+++-------------------------+------+-----------+-----------------------------------------------------------------------+
++|                         |      |           | Tell how cores are distributed over instances when only part of all   |
++|                         |      |           | cores are needed on a machine with multiple NUMA nodes.               |
++| `--strategy`            | str  | 'scatter' | Supported choices are ['scatter', 'close']. With 'scatter', instances |
++|                         |      |           | are distributed evenly as much as possible over all available NUMA    |
++|                         |      |           | nodes. While with 'close', instances are assigned to cores in order   |
++|                         |      |           | continuously.                                                         |
+++-------------------------+------+-----------+-----------------------------------------------------------------------+
++| `--latency-mode`        |  --  |   False   | Use 4 cores per instance over all physical cores.                     |
+++-------------------------+------+-----------+-----------------------------------------------------------------------+
++| `--throughput-mode`     |  --  |   False   | Run one instance per node with all physical cores.                    |
+++-------------------------+------+-----------+-----------------------------------------------------------------------+
++|                         |      |           | Enable benchmark config. JeMalloc's MALLOC_CONF has been tuned for low|
++| `--benchmark`           |  --  |   False   | latency. Recommend to use this for benchmarking purpose; for other use|
++|                         |      |           | cases, this MALLOC_CONF may cause Out-of-Memory crash.                |
+++-------------------------+------+-----------+-----------------------------------------------------------------------+
++
++Usage Examples:
++~~~~~~~~~~~~~~~
+ 
+ Single instance inference
+ -------------------------
+@@ -62,13 +138,13 @@
+ 
+ ::
+ 
+-   python -m torch.backends.xeon.run_cpu --throughput-mode script.py args
++   torch-xeon-launcher --throughput-mode script.py args
+ 
+ 2. Run single-instance inference on a single CPU node.
+ 
+ ::
+ 
+-   python -m torch.backends.xeon.run_cpu --node-id 1 script.py args
++   torch-xeon-launcher --nodes-list 1 script.py args
+ 
+ Multi-instance inference
+ ------------------------
+@@ -77,772 +153,233 @@
+    By default this tool runs one process per node. If you want to set the instance numbers and core per instance,
+    --ninstances and  --ncores-per-instance should be set.
+ 
+-::
++   .. code-block:: bash
+ 
+-   python -m torch.backends.xeon.run_cpu -- python_script args
++      torch-xeon-launcher -- python_script args
+ 
+-   eg: on an Intel(R) Xeon(R) Scalable Processor with 14 instance, 4 cores per instance
++   eg: on an Intel® Xeon® Scalable Processor with 14 instance, 4 cores per instance
+ 
+-::
++   .. code-block:: bash
+ 
+-   python -m torch.backends.xeon.run_cpu --ninstances 14 --ncores-per-instance 4 python_script args
++      torch-xeon-launcher --ninstances 14 --ncores-per-instance 4 python_script args
+ 
+ 2. Run single-instance inference among multiple instances.
+    By default, runs all ninstances. If you want to independently run a single instance among ninstances, specify rank.
+ 
+-   eg: run 0th instance on an Intel(R) Xeon(R) Scalable Processor with 2 instance (i.e., numactl -C 0-27)
++   eg: run 0th instance on an Intel® Xeon® Scalable Processor with 2 instance (i.e., numactl -C 0-27)
+ 
+-::
++   .. code-block:: bash
+ 
+-   python -m torch.backends.xeon.run_cpu --ninstances 2 --rank 0 python_script args
++      torch-xeon-launcher --ninstances 2 --instance_idx 0 python_script args
+ 
+-   eg: run 1st instance on an Intel(R) Xeon(R) Scalable Processor with 2 instance (i.e., numactl -C 28-55)
++   eg: run 1st instance on an Intel® Xeon® Scalable Processor with 2 instance (i.e., numactl -C 28-55)
+ 
+-::
++   .. code-block:: bash
+ 
+-   python -m torch.backends.xeon.run_cpu --ninstances 2 --rank 1 python_script args
++      torch-xeon-launcher --ninstances 2 --instance_idx 1 python_script args
+ 
+-   eg: run 0th instance on an Intel(R) Xeon(R) Scalable Processor with 2 instance, 2 cores per instance,
++   eg: run 0th instance on an Intel® Xeon® Scalable Processor with 2 instance, 2 cores per instance,
+    first four cores (i.e., numactl -C 0-1)
+ 
+-::
++   .. code-block:: bash
+ 
+-   python -m torch.backends.xeon.run_cpu --core-list "0, 1, 2, 3" --ninstances 2 --ncores-per-instance 2
+-   --rank 0 python_script args
++      torch-xeon-launcher --cores-list "0,1,2,3" --ninstances 2 --ncores-per-instance 2 --instance_idx 0 python_script args
+ 
+ 3. To look up what optional arguments this module offers:
+ 
+-::
++   .. code-block:: bash
+ 
+-    python -m torch.backends.xeon.run_cpu --help
++      torch-xeon-launcher --help
+ 
+ Memory allocator
+ ----------------
+ 
+-"--enable-tcmalloc" and "--enable-jemalloc" can be used to enable different memory allcator.
++`--memory-allocator` can be used to enable different memory allcator.
++
++.. code-block:: bash
++
++   --memory-allocator default
++   --memory-allocator tcmalloc
++   --memory-allocator jemalloc
+ 
+ """
+ 
++import argparse
+ import glob
+ import logging
+ import os
+ import platform
+-import re
+-import subprocess
+-import sys
+-from argparse import ArgumentParser, RawTextHelpFormatter, REMAINDER
+-from os.path import expanduser
+-from typing import Dict, List
+-
+-from torch.distributed.elastic.multiprocessing import (
+-    DefaultLogsSpecs as _DefaultLogsSpecs,
+-    start_processes,
+-    Std,
+-)
+-
+-
+-format_str = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+-logging.basicConfig(level=logging.INFO, format=format_str)
+-logger = logging.getLogger(__name__)
+-
+-
+-class _CPUinfo:
+-    """Get CPU information, such as cores list and NUMA information."""
+-
+-    def __init__(self, test_input=""):
+-        self.cpuinfo = []
+-        if platform.system() in ["Windows", "Darwin"]:
+-            raise RuntimeError(f"{platform.system()} is not supported!!!")
+-        elif platform.system() == "Linux":
+-            # Sample output of: `lscpu --parse=CPU,Core,Socket,Node`
+-            #
+-            # # The following is the parsable format, which can be fed to other
+-            # # programs. Each different item in every column has an unique ID
+-            # # starting from zero.
+-            # # CPU,Core,Socket,Node
+-            # 0,0,0,0
+-            # 1,1,0,0
+-            # ...
+-            if test_input == "":
+-                lscpu_cmd = ["lscpu", "--parse=CPU,Core,Socket,Node"]
+-                lscpu_info = subprocess.check_output(
+-                    lscpu_cmd, universal_newlines=True
+-                ).split("\n")
+-            else:
+-                lscpu_info = test_input.split("\n")
+-
+-            # Get information about  cpu, core, socket and node
+-            for line in lscpu_info:
+-                pattern = r"^([\d]+,[\d]+,[\d]+,[\d]?)"
+-                regex_out = re.search(pattern, line)
+-                if regex_out:
+-                    self.cpuinfo.append(regex_out.group(1).strip().split(","))
+-
+-            # physical cores := core column in lscpu output
+-            #  logical cores :=  cPU column in lscpu output
+-            self.node_nums = int(max(line[3] for line in self.cpuinfo)) + 1
+-            self.node_physical_cores: List[List[int]] = []  # node_id is index
+-            self.node_logical_cores: List[List[int]] = []  # node_id is index
+-            self.physical_core_node_map = {}  # physical core to numa node id
+-            self.logical_core_node_map = {}  # logical core to numa node id
+-
+-            for node_id in range(self.node_nums):
+-                cur_node_physical_core = []
+-                cur_node_logical_core = []
+-                for cpuinfo in self.cpuinfo:
+-                    nid = cpuinfo[3] if cpuinfo[3] != "" else "0"
+-                    if node_id == int(nid):
+-                        if int(cpuinfo[1]) not in cur_node_physical_core:
+-                            cur_node_physical_core.append(int(cpuinfo[1]))
+-                            self.physical_core_node_map[int(cpuinfo[1])] = int(node_id)
+-                        cur_node_logical_core.append(int(cpuinfo[0]))
+-                        self.logical_core_node_map[int(cpuinfo[0])] = int(node_id)
+-                self.node_physical_cores.append(cur_node_physical_core)
+-                self.node_logical_cores.append(cur_node_logical_core)
+-
+-    def _physical_core_nums(self):
+-        return len(self.node_physical_cores) * len(self.node_physical_cores[0])
+-
+-    def _logical_core_nums(self):
+-        return len(self.node_logical_cores) * len(self.node_logical_cores[0])
+-
+-    def get_node_physical_cores(self, node_id):
+-        if node_id < 0 or node_id > self.node_nums - 1:
+-            raise ValueError(
+-                f"Invalid node id: {node_id}. Valid node ids: {list(range(len(self.node_physical_cores)))}"
+-            )
+-        return self.node_physical_cores[node_id]
+-
+-    def get_node_logical_cores(self, node_id):
+-        if node_id < 0 or node_id > self.node_nums - 1:
+-            raise ValueError(
+-                f"Invalid node id: {node_id}. Valid node ids: {list(range(len(self.node_physical_cores)))}"
+-            )
+-        return self.node_logical_cores[node_id]
+-
+-    def get_all_physical_cores(self):
+-        all_cores = []
+-        for cores in self.node_physical_cores:
+-            all_cores.extend(cores)
+-        return all_cores
+-
+-    def get_all_logical_cores(self):
+-        all_cores = []
+-        for cores in self.node_logical_cores:
+-            all_cores.extend(cores)
+-        return all_cores
+-
+-    def numa_aware_check(self, core_list):
+-        """
+-        Check whether all cores in core_list are in the same NUMA node.
+-
+-        Cross NUMA will reduce performance.
+-        We strongly advice to not use cores on different nodes.
+-        """
+-        cores_numa_map = self.logical_core_node_map
+-        numa_ids = []
+-        for core in core_list:
+-            numa_id = cores_numa_map[core]
+-            if numa_id not in numa_ids:
+-                numa_ids.append(numa_id)
+-        if len(numa_ids) > 1:
+-            logger.warning(
+-                "Numa Aware: cores:%s on different NUMA nodes:%s. To avoid \
+-this behavior, please use --ncores-per-instance knob to make sure number of cores is divisible by --ncores-per-\
+-instance. Alternatively, please use --skip-cross-node-cores knob.",
+-                str(core_list),
+-                str(numa_ids),
+-            )
+-        if len(numa_ids) == 0:
+-            raise RuntimeError(
+-                "invalid number of NUMA nodes; please make sure numa_ids >= 1"
+-            )
+-        return numa_ids
+-
+-
+-class _Launcher:
+-    r"""Class for launcher."""
+-
+-    msg_lib_notfound = f"Unable to find the {{0}} library file lib{{1}}.so in $CONDA_PREFIX/lib or $VIRTUAL_ENV/lib \
+-or /.local/lib/ or /usr/local/lib/ or /usr/local/lib64/ or /usr/lib or /usr/lib64 or \
+-{expanduser('~')}/.local/lib/ so the LD_PRELOAD environment variable will not be set."
+-
+-    def __init__(self) -> None:
+-        self.cpuinfo = _CPUinfo()
+-
+-    def add_lib_preload(self, lib_type):
+-        """Enable TCMalloc/JeMalloc/intel OpenMP."""
+-        library_paths = []
+-        if "CONDA_PREFIX" in os.environ:
+-            library_paths.append(f"{os.environ['CONDA_PREFIX']}/lib")
+-        if "VIRTUAL_ENV" in os.environ:
+-            library_paths.append(f"{os.environ['VIRTUAL_ENV']}/lib")
+-
+-        library_paths += [
+-            f"{expanduser('~')}/.local/lib",
+-            "/usr/local/lib",
+-            "/usr/local/lib64",
+-            "/usr/lib",
+-            "/usr/lib64",
+-        ]
+-
+-        lib_find = False
+-        lib_set = False
+-        for item in os.getenv("LD_PRELOAD", "").split(":"):
+-            if item.endswith(f"lib{lib_type}.so"):
+-                lib_set = True
+-                break
+-        if not lib_set:
+-            for lib_path in library_paths:
+-                library_file = os.path.join(lib_path, f"lib{lib_type}.so")
+-                matches = glob.glob(library_file)
+-                if len(matches) > 0:
+-                    ld_preloads = [f"{matches[0]}", os.getenv("LD_PRELOAD", "")]
+-                    os.environ["LD_PRELOAD"] = os.pathsep.join(
+-                        [p.strip(os.pathsep) for p in ld_preloads if p]
+-                    )
+-                    lib_find = True
+-                    break
+-        return lib_set or lib_find
+-
+-    def is_numactl_available(self):
+-        numactl_available = False
+-        try:
+-            cmd = ["numactl", "-C", "0", "-m", "0", "hostname"]
+-            r = subprocess.run(
+-                cmd,
+-                env=os.environ,
+-                stdout=subprocess.DEVNULL,
+-                stderr=subprocess.DEVNULL,
+-                check=False,
+-            )
+-            if r.returncode == 0:
+-                numactl_available = True
+-        except Exception:
+-            pass
+-        return numactl_available
+-
+-    def set_memory_allocator(
+-        self, enable_tcmalloc=True, enable_jemalloc=False, use_default_allocator=False
+-    ):
+-        """
+-        Enable TCMalloc/JeMalloc with LD_PRELOAD and set configuration for JeMalloc.
+-
+-        By default, PTMalloc will be used for PyTorch, but TCMalloc and JeMalloc can get better
+-        memory reuse and reduce page fault to improve performance.
+-        """
+-        if enable_tcmalloc and enable_jemalloc:
+-            raise RuntimeError(
+-                "Unable to enable TCMalloc and JEMalloc at the same time."
+-            )
+-
+-        if enable_tcmalloc:
+-            find_tc = self.add_lib_preload(lib_type="tcmalloc")
+-            if not find_tc:
+-                msg = f'{self.msg_lib_notfound} you can use "conda install -c conda-forge gperftools" to install {{0}}'
+-                logger.warning(msg.format("TCmalloc", "tcmalloc"))  # noqa: G001
+-            else:
+-                logger.info("Use TCMalloc memory allocator")
+-
+-        elif enable_jemalloc:
+-            find_je = self.add_lib_preload(lib_type="jemalloc")
+-            if not find_je:
+-                msg = f'{self.msg_lib_notfound} you can use "conda install -c conda-forge jemalloc" to install {{0}}'
+-                logger.warning(msg.format("Jemalloc", "jemalloc"))  # noqa: G001
+-            else:
+-                logger.info("Use JeMalloc memory allocator")
+-                self.set_env(
+-                    "MALLOC_CONF",
+-                    "oversize_threshold:1,background_thread:true,metadata_thp:auto",
+-                )
+-
+-        elif use_default_allocator:
+-            pass
++from argparse import RawTextHelpFormatter
++from datetime import datetime
+ 
+-        else:
+-            find_tc = self.add_lib_preload(lib_type="tcmalloc")
+-            if find_tc:
+-                logger.info("Use TCMalloc memory allocator")
+-                return
+-            find_je = self.add_lib_preload(lib_type="jemalloc")
+-            if find_je:
+-                logger.info("Use JeMalloc memory allocator")
+-                return
+-            logger.warning(
+-                """Neither TCMalloc nor JeMalloc is found in $CONDA_PREFIX/lib or $VIRTUAL_ENV/lib
+-                            or /.local/lib/ or /usr/local/lib/ or /usr/local/lib64/ or /usr/lib or /usr/lib64 or
+-                           %s/.local/lib/ so the LD_PRELOAD environment variable will not be set.
+-                           This may drop the performance""",
+-                expanduser("~"),
+-            )
+-
+-    def log_env_var(self, env_var_name=""):
+-        if env_var_name in os.environ:
+-            logger.info("%s=%s", env_var_name, os.environ[env_var_name])
+-
+-    def set_env(self, env_name, env_value):
+-        if not env_value:
+-            logger.warning("%s is None", env_name)
+-        if env_name not in os.environ:
+-            os.environ[env_name] = env_value
+-        elif os.environ[env_name] != env_value:
+-            logger.warning(
+-                "Overriding value with the one set in environment variable: %s. \
+-Value applied: %s. Value ignored: %s",
+-                env_name,
+-                os.environ[env_name],
+-                env_value,
+-            )
+-        self.log_env_var(env_name)
+-
+-    # set_kmp_affinity is used to control whether to set KMP_AFFINITY or not.
+-    # In scenario that use all cores on all nodes, including logical cores, setting KMP_AFFINITY disables logical cores.
+-    # In this case, KMP_AFFINITY should not be set.
+-    def set_multi_thread_and_allocator(
+-        self,
+-        ncores_per_instance,
+-        disable_iomp=False,
+-        set_kmp_affinity=True,
+-        enable_tcmalloc=True,
+-        enable_jemalloc=False,
+-        use_default_allocator=False,
+-    ):
+-        """
+-        Set multi-thread configuration and enable Intel openMP and TCMalloc/JeMalloc.
+-
+-        By default, GNU openMP and PTMalloc are used in PyTorch. but Intel openMP and TCMalloc/JeMalloc are better alternatives
+-        to get performance benefit.
+-        """
+-        self.set_memory_allocator(
+-            enable_tcmalloc, enable_jemalloc, use_default_allocator
+-        )
+-        self.set_env("OMP_NUM_THREADS", str(ncores_per_instance))
+-        if not disable_iomp:
+-            find_iomp = self.add_lib_preload(lib_type="iomp5")
+-            if not find_iomp:
+-                msg = f'{self.msg_lib_notfound} you can use "conda install mkl" to install {{0}}'
+-                logger.warning(msg.format("iomp", "iomp5"))  # noqa: G001
+-            else:
+-                logger.info("Using Intel OpenMP")
+-                if set_kmp_affinity:
+-                    self.set_env("KMP_AFFINITY", "granularity=fine,compact,1,0")
+-                self.set_env("KMP_BLOCKTIME", "1")
+-        self.log_env_var("LD_PRELOAD")
+-
+-    r"""
+-     Launcher for single instance and multi-instance
+-     """
+-
+-    def launch(self, args):
+-        cores = []
+-        set_kmp_affinity = True
+-        enable_taskset = False
+-        if args.core_list:  # user specify what cores will be used by params
+-            cores = [int(x) for x in args.core_list.split(",")]
+-            if args.ncores_per_instance == -1:
+-                raise RuntimeError(
+-                    'please specify the "--ncores-per-instance" if you have pass the --core-list params'
+-                )
+-            elif (
+-                args.ninstances > 1
+-                and args.ncores_per_instance * args.ninstances < len(cores)
+-            ):
+-                logger.warning(
+-                    "only first %s cores will be used, \
+-but you specify %s cores in core_list",
+-                    args.ncores_per_instance * args.ninstances,
+-                    len(cores),
+-                )
+-            else:
+-                args.ninstances = len(cores) // args.ncores_per_instance
++from ._launcher_multi_instances import MultiInstancesLauncher
+ 
+-        else:
+-            if args.use_logical_core:
+-                if args.node_id != -1:
+-                    cores = self.cpuinfo.get_node_logical_cores(args.node_id)
+-                else:
+-                    cores = self.cpuinfo.get_all_logical_cores()
+-                    # When using all cores on all nodes, including logical cores,
+-                    # setting KMP_AFFINITY disables logical cores. Thus, KMP_AFFINITY should not be set.
+-                    set_kmp_affinity = False
+-            else:
+-                if args.node_id != -1:
+-                    cores = self.cpuinfo.get_node_physical_cores(args.node_id)
+-                else:
+-                    cores = self.cpuinfo.get_all_physical_cores()
+-            if (
+-                not args.multi_instance
+-                and args.ninstances == -1
+-                and args.ncores_per_instance == -1
+-            ):
+-                args.ninstances = 1
+-                args.ncores_per_instance = len(cores)
+-            elif (
+-                args.multi_instance
+-                and args.ninstances == -1
+-                and args.ncores_per_instance == -1
+-            ):
+-                args.throughput_mode = True
+-            elif args.ncores_per_instance == -1 and args.ninstances != -1:
+-                if args.ninstances > len(cores):
+-                    raise RuntimeError(
+-                        f"there are {len(cores)} total cores but you specify {args.ninstances} ninstances; \
+-please make sure ninstances <= total_cores)"
+-                    )
+-                else:
+-                    args.ncores_per_instance = len(cores) // args.ninstances
+-            elif args.ncores_per_instance != -1 and args.ninstances == -1:
+-                if not args.skip_cross_node_cores:
+-                    args.ninstances = len(cores) // args.ncores_per_instance
+-                else:
+-                    ncore_per_node = len(self.cpuinfo.node_physical_cores[0])
+-                    num_leftover_cores = ncore_per_node % args.ncores_per_instance
+-                    if args.ncores_per_instance > ncore_per_node:
+-                        # too many ncores_per_instance to skip cross-node cores
+-                        logger.warning(
+-                            "there are %s core(s) per socket, but you specify %s ncores_per_instance and \
+-skip_cross_node_cores. Please make sure --ncores-per-instance < core(s) per \
+-socket",
+-                            ncore_per_node,
+-                            args.ncores_per_instance,
+-                        )
+-                        sys.exit(-1)
+-                    elif num_leftover_cores == 0:
+-                        # aren't any cross-node cores
+-                        logger.info(
+-                            "--skip-cross-node-cores is set, but there are no cross-node cores."
+-                        )
+-                        args.ninstances = len(cores) // args.ncores_per_instance
+-                    else:
+-                        # skip cross-node cores
+-                        if args.ninstances != -1:
+-                            logger.warning(
+-                                "--skip-cross-node-cores is exclusive to --ninstances. --ninstances \
+-won't take effect even if it is set explicitly."
+-                            )
+-
+-                        i = 1
+-                        leftover_cores = set()
+-                        while ncore_per_node * i <= len(cores):
+-                            leftover_cores.update(
+-                                cores[
+-                                    ncore_per_node * i
+-                                    - num_leftover_cores : ncore_per_node * i
+-                                ]
+-                            )
+-                            i += 1
+-                        cores = list(set(cores) - leftover_cores)
+-                        assert len(cores) % args.ncores_per_instance == 0
+-                        args.ninstances = len(cores) // args.ncores_per_instance
+-            else:
+-                if args.ninstances * args.ncores_per_instance > len(cores):
+-                    raise RuntimeError(
+-                        "Please make sure ninstances * ncores_per_instance <= total_cores"
+-                    )
+-            if args.latency_mode:
+-                logger.warning(
+-                    "--latency-mode is exclusive to --ninstances, --ncores-per-instance, --node-id and \
+---use-logical-core. They won't take effect even they are set explicitly."
+-                )
+-                args.ncores_per_instance = 4
+-                cores = self.cpuinfo.get_all_physical_cores()
+-                args.ninstances = len(cores) // args.ncores_per_instance
+-
+-            if args.throughput_mode:
+-                logger.warning(
+-                    "--throughput-mode is exclusive to --ninstances, --ncores-per-instance, --node-id and \
+---use-logical-core. They won't take effect even they are set explicitly."
+-                )
+-                args.ninstances = self.cpuinfo.node_nums
+-                cores = self.cpuinfo.get_all_physical_cores()
+-                args.ncores_per_instance = len(cores) // args.ninstances
+-
+-        if args.ninstances > 1 and args.rank != -1:
+-            logger.info(
+-                "assigning %s cores for instance %s",
+-                args.ncores_per_instance,
+-                args.rank,
+-            )
+-
+-        if not args.disable_numactl:
+-            numactl_available = self.is_numactl_available()
+-            if not numactl_available:
+-                if not args.disable_taskset:
+-                    logger.warning(
+-                        "Core binding with numactl is not available. Disabling numactl and using taskset instead. \
+-                    This may affect performance in multi-socket system; please use numactl if memory binding is needed."
+-                    )
+-                    args.disable_numactl = True
+-                    enable_taskset = True
+-                else:
+-                    logger.warning(
+-                        "Core binding with numactl is not available, and --disable_taskset is set. \
+-                    Please unset --disable_taskset to use taskset instead of numactl."
+-                    )
+-                    sys.exit(-1)
+-
+-        if not args.disable_taskset:
+-            enable_taskset = True
+-
+-        self.set_multi_thread_and_allocator(
+-            args.ncores_per_instance,
+-            args.disable_iomp,
+-            set_kmp_affinity,
+-            args.enable_tcmalloc,
+-            args.enable_jemalloc,
+-            args.use_default_allocator,
+-        )
+-        entrypoint = ""
+-        launch_args = {}
+-        launch_envs: Dict[int, Dict] = {}
+-        launch_tee = {}
+-        # check whether is launched from torchrun with --nproc-per-node <num workers>
+-        local_size = int(os.environ.get("LOCAL_WORLD_SIZE", 1))
+-        local_rank = int(os.environ.get("LOCAL_RANK", 0))
+-        for i in range(args.ninstances):
+-            cmd = []
+-            cur_process_cores = ""
+-            if not args.disable_numactl or enable_taskset:
+-                if not args.disable_numactl:
+-                    cmd = ["numactl"]
+-                elif enable_taskset:
+-                    cmd = ["taskset"]
+-                cores = sorted(cores)
+-                if (
+-                    args.rank == -1
+-                ):  # sequentially assign ncores_per_instance to ninstances
+-                    core_list = cores[
+-                        i
+-                        * args.ncores_per_instance : (i + 1)
+-                        * args.ncores_per_instance
+-                    ]
+-                else:  # assign ncores_per_instance from rank
+-                    core_list = cores[
+-                        args.rank
+-                        * args.ncores_per_instance : (args.rank + 1)
+-                        * args.ncores_per_instance
+-                    ]
+-
+-                core_ranges: List[Dict] = []
+-                if local_size > 1:
+-                    total_num_cores = len(core_list)
+-                    cores_per_rank = total_num_cores // local_size
+-                    assert (
+-                        cores_per_rank >= 1
+-                    ), "At least one core needs to be assigned to each rank"
+-                    core_list = core_list[
+-                        cores_per_rank * local_rank : cores_per_rank * (local_rank + 1)
+-                    ]
+-                for core in core_list:
+-                    if len(core_ranges) == 0:
+-                        range_elem = {"start": core, "end": core}
+-                        core_ranges.append(range_elem)
+-                    else:
+-                        if core - core_ranges[-1]["end"] == 1:
+-                            core_ranges[-1]["end"] = core
+-                        else:
+-                            range_elem = {"start": core, "end": core}
+-                            core_ranges.append(range_elem)
+-                for r in core_ranges:
+-                    cur_process_cores = f"{cur_process_cores}{r['start']}-{r['end']},"
+-                cur_process_cores = cur_process_cores[:-1]
+-                if not args.disable_numactl:
+-                    numa_params = f"-C {cur_process_cores} "
+-                    numa_ids = ",".join(
+-                        [
+-                            str(numa_id)
+-                            for numa_id in self.cpuinfo.numa_aware_check(core_list)
+-                        ]
+-                    )
+-                    numa_params += f"-m {numa_ids}"
+-                    cmd.extend(numa_params.split())
+-                elif enable_taskset:
+-                    taskset_params = f"-c {cur_process_cores} "
+-                    cmd.extend(taskset_params.split())
+-            with_python = not args.no_python
+-            if with_python:
+-                cmd.append(sys.executable)
+-                cmd.append("-u")
+-            if args.module:
+-                cmd.append("-m")
+-            cmd.append(args.program)
+-            cmd.extend(args.program_args)
+-            cmd_s = " ".join(cmd)
+-            logger.info(cmd_s)
+-            if entrypoint == "":
+-                entrypoint = cmd[0]
+-            del cmd[0]
+-            launch_args[i] = tuple(cmd)
+-            launch_envs[i] = {}
+-            launch_tee[i] = Std.ALL
+-
+-            if args.rank != -1:  # launches single instance, rank, only
+-                break
+-
+-        ctx = start_processes(
+-            name=args.log_file_prefix,
+-            entrypoint=entrypoint,
+-            args=launch_args,
+-            envs=launch_envs,
+-            logs_specs=_DefaultLogsSpecs(log_dir=args.log_path, tee=launch_tee),
+-        )
+-        ctx.wait()
+ 
++__all__ = [
++    "main",
++]
+ 
+-def _add_memory_allocator_params(parser):
+-    group = parser.add_argument_group("Memory Allocator Parameters")
+-    # allocator control
++
++def _add_deprecated_params(parser):
++    group = parser.add_argument_group("Deprecated Arguments")
+     group.add_argument(
+         "--enable-tcmalloc",
+         "--enable_tcmalloc",
+         action="store_true",
+         default=False,
+-        help="Enable tcmalloc allocator",
++        help="Deprecated by --memory-allocator.",
+     )
+     group.add_argument(
+         "--enable-jemalloc",
+         "--enable_jemalloc",
+         action="store_true",
+         default=False,
+-        help="Enable jemalloc allocator",
++        help="Deprecated by --memory-allocator.",
+     )
+     group.add_argument(
+         "--use-default-allocator",
+         "--use_default_allocator",
+         action="store_true",
+         default=False,
+-        help="Use default memory allocator",
+-    )
+-
+-
+-def _add_multi_instance_params(parser):
+-    group = parser.add_argument_group("Multi-instance Parameters")
+-    # multi-instance control
+-    group.add_argument(
+-        "--ncores-per-instance",
+-        "--ncores_per_instance",
+-        metavar="\b",
+-        default=-1,
+-        type=int,
+-        help="Cores per instance",
+-    )
+-    group.add_argument(
+-        "--ninstances",
+-        metavar="\b",
+-        default=-1,
+-        type=int,
+-        help="For multi-instance, you should give the cores number you used for per instance.",
++        help="Deprecated by --memory-allocator.",
+     )
+     group.add_argument(
+         "--skip-cross-node-cores",
+         "--skip_cross_node_cores",
+         action="store_true",
+         default=False,
+-        help="If specified --ncores-per-instance, skips cross-node cores.",
+-    )
+-    group.add_argument(
+-        "--rank",
+-        metavar="\b",
+-        default="-1",
+-        type=int,
+-        help="Specify instance index to assign ncores_per_instance for rank; \
+-otherwise ncores_per_instance will be assigned sequentially to ninstances. Please refer to \
+-https://github.com/intel/intel-extension-for-pytorch/blob/master/docs/tutorials/performance_tuning/launch_script.md",
+-    )
+-    group.add_argument(
+-        "--latency-mode",
+-        "--latency_mode",
+-        action="store_true",
+-        default=False,
+-        help="By default 4 core per instance and use all physical cores",
+-    )
+-    group.add_argument(
+-        "--throughput-mode",
+-        "--throughput_mode",
+-        action="store_true",
+-        default=False,
+-        help="By default one instance per node and use all physical cores",
++        help="Deprecated by --bind-numa-node.",
+     )
+     group.add_argument(
+-        "--node-id",
+         "--node_id",
++        "--node-id",
+         metavar="\b",
+-        default=-1,
+         type=int,
+-        help="node id for multi-instance, by default all nodes will be used",
++        default=-1,
++        help="Deprecated by --nodes-list.",
+     )
+     group.add_argument(
+-        "--use-logical-core",
+         "--use_logical_core",
++        "--use-logical-core",
+         action="store_true",
+         default=False,
+-        help="Whether only use physical cores",
++        help="Deprecated by --use-logical-cores.",
+     )
+     group.add_argument(
+-        "--disable-numactl",
+         "--disable_numactl",
++        "--disable-numactl",
+         action="store_true",
+         default=False,
+-        help="Disable numactl",
++        help="Deprecated by --multi-task-manager.",
+     )
+     group.add_argument(
+-        "--disable-taskset",
+         "--disable_taskset",
++        "--disable-taskset",
+         action="store_true",
+         default=False,
+-        help="Disable taskset",
++        help="Deprecated by --multi-task-manager.",
++    )
++    group.add_argument(
++        "--disable_iomp",
++        "--disable-iomp",
++        action="store_true",
++        default=False,
++        help="Deprecated by --omp-runtime.",
+     )
+     group.add_argument(
+-        "--core-list",
+         "--core_list",
++        "--core-list",
+         metavar="\b",
+-        default=None,
+         type=str,
+-        help='Specify the core list as "core_id, core_id, ....", otherwise, all the cores will be used.',
++        default="",
++        help="Deprecated by --cores-list.",
+     )
+     group.add_argument(
+-        "--log-path",
+         "--log_path",
+-        metavar="\b",
+-        default="",
++        "--log-path",
+         type=str,
+-        help="The log file directory. Default path is "
+-        ", which means disable logging to files.",
++        default="",
++        help="Deprecated by --log-dir.",
+     )
+     group.add_argument(
+-        "--log-file-prefix",
+-        "--log_file_prefix",
++        "--multi_instance",
++        "--multi-instance",
++        action="store_true",
++        default=False,
++        help="Deprecated. Will be removed.",
++    )
++    group.add_argument(
++        "--rank",
+         metavar="\b",
+-        default="run",
+-        type=str,
+-        help="log file prefix",
++        default="-1",
++        type=int,
++        help="Deprecated by --instance-idx.",
+     )
+ 
+ 
+-def _add_kmp_iomp_params(parser):
+-    group = parser.add_argument_group("IOMP Parameters")
+-    group.add_argument(
+-        "--disable-iomp",
+-        "--disable_iomp",
+-        action="store_true",
+-        default=False,
+-        help="By default, we use Intel OpenMP and libiomp5.so will be add to LD_PRELOAD",
+-    )
++def _process_deprecated_params(args, logger):
++    if args.node_id != -1:
++        logger.warning("Argument --node_id is deprecated by --nodes-list.")
++        args.nodes_list = str(args.node_id)
++    if args.core_list != "":
++        logger.warning("Argument --core_list is deprecated by --cores-list.")
++        args.cores_list = args.core_list
++    if args.use_logical_core:
++        logger.warning(
++            "Argument --use_logical_core is deprecated by --use-logical-cores."
++        )
++        args.use_logical_cores = args.use_logical_core
++    if args.log_path != "":
++        logger.warning("Argument --log_path is deprecated by --log-dir.")
++        args.log_dir = args.log_path
++
++    if args.multi_instance:
++        logger.warning(
++            "Argument --multi_instance is deprecated. Will be removed."  # noqa: G003
++            + "If you are using the deprecated argument, please update it to the new one."
++        )
++
++    if args.enable_tcmalloc or args.enable_jemalloc or args.use_default_allocator:
++        logger.warning(
++            "Arguments --enable_tcmalloc, --enable_jemalloc and --use_default_allocator"  # noqa: G003
++            + "are deprecated by --memory-allocator tcmalloc/jemalloc/auto."
++        )
++        if args.use_default_allocator:
++            args.memory_allocator = "default"
++        if args.enable_jemalloc:
++            args.memory_allocator = "jemalloc"
++        if args.enable_tcmalloc:
++            args.memory_allocator = "tcmalloc"
++    if args.disable_numactl:
++        logger.warning(
++            "Argument --disable_numactl is deprecated by --multi-task-manager taskset."
++        )
++        args.multi_task_manager = "taskset"
++    if args.disable_taskset:
++        logger.warning(
++            "Argument --disable_taskset is deprecated by --multi-task-manager numactl."
++        )
++        args.multi_task_manager = "numactl"
++    if args.disable_iomp:
++        logger.warning(
++            "Argument --disable_iomp is deprecated by --omp-runtime default."
++        )
++        args.omp_runtime = "default"
++    if args.skip_cross_node_cores:
++        logger.warning(
++            "Argument --skip-cross-node-cores is deprecated by --bind-numa-node."
++        )
++        args.bind_numa_node = args.skip_cross_node_cores
++    if args.rank != -1:
++        logger.warning("Argument --rank is deprecated by --instance-idx.")
++        args.instance_idx = str(args.rank)
+ 
+ 
+-def create_args(parser=None):
++def _init_parser(parser):
+     """
+-    Parse the command line options.
+-
++    Helper function parsing the command line options
+     @retval ArgumentParser
+     """
+-    parser.add_argument(
+-        "--multi-instance",
+-        "--multi_instance",
+-        action="store_true",
+-        default=False,
+-        help="Enable multi-instance, by default one instance per node",
+-    )
+ 
+     parser.add_argument(
+         "-m",
+@@ -850,94 +387,115 @@ def create_args(parser=None):
+         default=False,
+         action="store_true",
+         help="Changes each process to interpret the launch script "
+-        "as a python module, executing with the same behavior as"
+-        '"python -m".',
++        'as a python module, executing with the same behavior as "python -m".',
+     )
+-
+     parser.add_argument(
+         "--no-python",
+         "--no_python",
+         default=False,
+         action="store_true",
+-        help='Do not prepend the --program script with "python" - just exec '
+-        "it directly. Useful when the script is not a Python script.",
++        help="Avoid applying python to execute program.",
++    )
++    parser.add_argument(
++        "--log-dir",
++        "--log_dir",
++        default="",
++        type=str,
++        help="The log file directory. Setting it to empty disables logging to files.",
++    )
++    parser.add_argument(
++        "--log-file-prefix",
++        "--log_file_prefix",
++        default="run",
++        type=str,
++        help="log file name prefix",
+     )
+-
+-    _add_memory_allocator_params(parser)
+-    _add_kmp_iomp_params(parser)
+-
+-    _add_multi_instance_params(parser)
+-    # positional
+     parser.add_argument(
+         "program",
+         type=str,
+-        help="The full path to the program/script to be launched. "
++        help="Full path to the program/script to be launched. "
+         "followed by all the arguments for the script",
+     )
+-
+-    # rest from the training program
+-    parser.add_argument("program_args", nargs=REMAINDER)
++    parser.add_argument(
++        "program_args",
++        nargs=argparse.REMAINDER,
++    )
++    launcher_multi_instances = MultiInstancesLauncher()
++    launcher_multi_instances.add_common_params(parser)
++    launcher_multi_instances.add_params(parser)
++    _add_deprecated_params(parser)
++    return parser
+ 
+ 
+-def main(args):
+-    env_before = set(os.environ.keys())
+-    if platform.system() in ["Windows", "Darwin"]:
+-        raise RuntimeError(f"{platform.system()} is not supported!!!")
++def _run_main_with_args(args, logger, logger_format_str):
++    if platform.system() == "Windows":
++        raise RuntimeError("Windows platform is not supported!!!")
+ 
+-    if args.log_path:
+-        os.makedirs(args.log_path, exist_ok=True)
+-    else:
+-        args.log_path = os.devnull
++    launcher_multi_instances = MultiInstancesLauncher(logger)
+ 
+-    if args.latency_mode and args.throughput_mode:
+-        raise RuntimeError(
+-            "Either args.latency_mode or args.throughput_mode should be set"
++    _process_deprecated_params(args, logger)
++    if args.log_dir:
++        path = os.path.dirname(
++            args.log_dir if args.log_dir.endswith("/") else f"{args.log_dir}/"
+         )
++        if not os.path.exists(path):
++            os.makedirs(path)
++        args.log_dir = path
+ 
+-    if not args.no_python and not args.program.endswith(".py"):
+-        raise RuntimeError(
+-            'For non Python script, you should use "--no-python" parameter.'
++        args.log_file_prefix = (
++            f'{args.log_file_prefix}_{datetime.now().strftime("%Y%m%d%H%M%S")}'
++        )
++        fileHandler = logging.FileHandler(
++            f"{args.log_dir}/{args.log_file_prefix}_instances.log"
+         )
++        logFormatter = logging.Formatter(logger_format_str)
++        fileHandler.setFormatter(logFormatter)
++        logger.addHandler(fileHandler)
++    else:
++        args.log_path = os.devnull
+ 
+-    # Verify LD_PRELOAD
++    assert args.no_python or args.program.endswith(
++        ".py"
++    ), 'For non Python script, you should use "--no-python" parameter.'
++
++    env_before = set(os.environ.keys())
+     if "LD_PRELOAD" in os.environ:
+         lst_valid = []
+         tmp_ldpreload = os.environ["LD_PRELOAD"]
+         for item in tmp_ldpreload.split(":"):
+-            matches = glob.glob(item)
+-            if len(matches) > 0:
+-                lst_valid.append(item)
+-            else:
+-                logger.warning("%s doesn't exist. Removing it from LD_PRELOAD.", item)
++            if item != "":
++                matches = glob.glob(item)
++                if len(matches) > 0:
++                    lst_valid.append(item)
++                else:
++                    logger.warning(
++                        f"{item} doesn't exist. Removing it from LD_PRELOAD."  # noqa: G004
++                    )
+         if len(lst_valid) > 0:
+             os.environ["LD_PRELOAD"] = ":".join(lst_valid)
+         else:
+             os.environ["LD_PRELOAD"] = ""
+ 
+-    launcher = _Launcher()
++    launcher = launcher_multi_instances
+     launcher.launch(args)
+     for x in sorted(set(os.environ.keys()) - env_before):
+-        logger.debug("%s=%s", x, os.environ[x])
++        logger.debug(f"{x}={os.environ[x]}")  # noqa: G004
+ 
+ 
+-if __name__ == "__main__":
+-    parser = ArgumentParser(
+-        description="This is a script for launching PyTorch inference on Intel(R) Xeon(R) Scalable "
+-        "Processors with optimal configurations. Single instance inference, "
+-        "multi-instance inference are enable. To get the peak performance on Intel(R) "
+-        "Xeon(R) Scalable Processors, the script optimizes the configuration "
+-        "of thread and memory management. For thread management, the script configures thread "
+-        "affinity and the preload of Intel OMP library. For memory management, it configures "
+-        "NUMA binding and preload optimized memory allocation library (e.g. tcmalloc, jemalloc) "
+-        "\n################################# Basic usage ############################# \n"
+-        "\n 1. single instance\n"
+-        "\n   >>> python -m torch.backends.xeon.run_cpu python_script args \n"
+-        "\n2. multi-instance \n"
+-        "\n   >>> python -m torch.backends.xeon.run_cpu --ninstances xxx "
+-        "--ncores-per-instance xx python_script args\n"
+-        "\n############################################################################# \n",
++def main():
++    format_str = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
++    logging.basicConfig(level=logging.INFO, format=format_str)
++    logger = logging.getLogger("torch-xeon-launcher")
++
++    parser = argparse.ArgumentParser(
++        description="This is a script for launching PyTorch inference on Intel® Xeon® Scalable Processors "
++        + "with optimal configurations. Single instance inference, multi-instance inference are supported.\n",
+         formatter_class=RawTextHelpFormatter,
+     )
+-    create_args(parser)
++    parser = _init_parser(parser)
+     args = parser.parse_args()
+-    main(args)
++    _run_main_with_args(args, logger, format_str)
++
++
++if __name__ == "__main__":
++    main()
