@@ -1,14 +1,15 @@
 # mypy: allow-untyped-defs
 """Utilities for converting and operating on ONNX, JIT and torch types."""
+
 from __future__ import annotations
 
 from typing import (
     Any,
-    Dict,
-    List,
+    Mapping,
     Optional,
     Protocol,
     runtime_checkable,
+    Sequence,
     Tuple,
     TYPE_CHECKING,
     Union,
@@ -31,8 +32,7 @@ if TYPE_CHECKING:
 @runtime_checkable
 class TensorLike(Protocol):
     @property
-    def dtype(self) -> torch.dtype | None:
-        ...
+    def dtype(self) -> torch.dtype | None: ...
 
 
 def is_torch_complex_dtype(tensor_dtype: torch.dtype) -> bool:
@@ -245,9 +245,9 @@ BaseArgumentTypes = Union[
 ]
 Argument = Optional[
     Union[
-        Tuple[Any, ...],  # actually Argument, but mypy can't represent recursive types
-        List[Any],  # actually Argument
-        Dict[str, Any],  # actually Argument
+        Tuple["Argument", ...],
+        Sequence["Argument"],
+        Mapping[str, "Argument"],
         slice,  # Slice[Argument, Argument, Argument], but slice is not a templated type in typing
         range,
         "torch.fx.Node",

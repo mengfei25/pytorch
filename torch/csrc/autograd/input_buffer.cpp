@@ -27,6 +27,7 @@ namespace {
 // TODO: clean this up when https://github.com/pytorch/pytorch/issues/60306 is
 // improved
 void record_stream_any_impl(Variable& var, c10::Stream& stream) {
+  // NOLINTNEXTLINE(bugprone-unchecked-optional-access)
   const auto guard = c10::impl::VirtualGuardImpl(device_of(var).value().type());
 
   if (C10_UNLIKELY(at::isBatchedTensor(var))) {
@@ -220,24 +221,6 @@ void InputBuffer::add(
       accumulate(buffer, pos, std::move(var));
     }
   }
-}
-
-auto InputBuffer::device() const -> at::Device {
-  // Since we pick the first non-CPU tensor, this won't work with
-  // mixed device-type operations (e.g., an op that is both CUDA
-  // and XLA).  This is *incredibly* unlikely, so we don't worry
-  // about it.
-  for (auto& var : buffer) {
-    if (var.defined()) {
-      auto device = var.device();
-      if (device.type() != at::kCPU) {
-        return device;
-      }
-    }
-  }
-  // Only report to the CPU thread if there really were no tensors
-  // from other devices.
-  return at::kCPU;
 }
 
 auto InputBuffer::variables(InputBuffer&& g) -> std::vector<Variable> {

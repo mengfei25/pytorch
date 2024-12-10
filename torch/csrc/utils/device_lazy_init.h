@@ -28,7 +28,8 @@ void set_requires_device_init(at::DeviceType device_type, bool value);
 
 inline void maybe_initialize_device(at::Device& device) {
   // Add more devices here to enable lazy initialization.
-  if (device.is_cuda() || device.is_xpu() || device.is_privateuseone()) {
+  if (device.is_cuda() || device.is_xpu() || device.is_privateuseone() ||
+      device.is_hpu() || device.is_mtia()) {
     device_lazy_init(device.type());
   }
 }
@@ -43,6 +44,14 @@ inline void maybe_initialize_device(std::optional<at::Device>& device) {
 inline void maybe_initialize_device(const at::TensorOptions& options) {
   auto device = options.device();
   maybe_initialize_device(device);
+}
+
+inline void maybe_initialize_device(
+    std::optional<at::DeviceType>& device_type) {
+  if (!device_type.has_value()) {
+    return;
+  }
+  maybe_initialize_device(device_type.value());
 }
 
 bool is_device_initialized(at::DeviceType device_type);
