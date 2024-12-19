@@ -6,7 +6,7 @@ set -ex -o pipefail
 # (This is set by default in the Docker images we build, so you don't
 # need to set it yourself.
 
-rm -rf /opt/cache /opt/sccache
+sudo rm -rf /opt/cache /opt/sccache
 
 # shellcheck source=./common.sh
 source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
