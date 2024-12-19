@@ -500,7 +500,7 @@ if [[ "$image" == *cuda*  && ${OS} == "ubuntu" ]]; then
 fi
 
 # Build image
-docker build \
+docker build --build-arg "HTTP_PROXY=${http_proxy}" \
        --no-cache \
        --progress=plain \
        --build-arg "BUILD_ENVIRONMENT=${image}" \
