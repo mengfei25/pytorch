@@ -118,6 +118,7 @@ echo "Environment variables"
 env
 
 echo "Testing pytorch"
+git pull origin mengfeil/test
 
 export LANG=C.UTF-8
 
