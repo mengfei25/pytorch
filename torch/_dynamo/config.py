@@ -52,6 +52,7 @@ skip_code_recursive_on_recompile_limit_hit = True
 # raise a hard error if cache limit is hit.  If you are on a model where you
 # know you've sized the cache correctly, this can help detect problems when
 # you regress guards/specialization.  This works best when recompile_limit = 1.
+# This flag is incompatible with: suppress_errors.
 # [@compile_ignored: runtime_behaviour]
 fail_on_recompile_limit_hit = False
 
@@ -164,6 +165,7 @@ traceable_tensor_subclasses: set[type[Any]] = set()
 # This is a good way to get your model to work one way or another, but you may
 # lose optimization opportunities this way.  Devs, if your benchmark model is failing
 # this way, you should figure out why instead of suppressing it.
+# This flag is incompatible with: fail_on_recompile_limit_hit.
 suppress_errors = bool(os.environ.get("TORCHDYNAMO_SUPPRESS_ERRORS", False))
 
 # Record and write an execution record of the current frame to a file
@@ -571,8 +573,10 @@ enable_compiler_collectives = os.environ.get("TORCH_COMPILER_COLLECTIVES", "0") 
 # will typically cause cache misses.  We continuously update the profile,
 # so if we only discover something is dynamic on the second run, we will update
 # the profile for subsequent runs.
-automatic_dynamic_local_pgo: bool = (
-    os.environ.get("TORCH_DYNAMO_AUTOMATIC_DYNAMIC_LOCAL_PGO", "0") == "1"
+automatic_dynamic_local_pgo: bool = Config(
+    justknob="pytorch/remote_cache:enable_local_automatic_dynamic_pgo",
+    env_name_force="TORCH_DYNAMO_AUTOMATIC_DYNAMIC_LOCAL_PGO",
+    default=True,
 )
 
 # Like above, but using remote cache

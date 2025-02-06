@@ -1330,8 +1330,8 @@ struct PackedArgs {
   explicit PackedArgs(std::vector<at::IValue> stack_)
       : stack(std::move(stack_)) {}
 
-  std::vector<at::IValue> vec() && {
-    return std::move(stack);
+  const std::vector<at::IValue>& vec() const {
+    return stack;
   }
 
   template <typename T>
@@ -1383,7 +1383,7 @@ struct TORCH_API PyCompilerInterface {
   PyCompilerInterface& operator=(PyCompilerInterface&&) = delete;
   virtual ~PyCompilerInterface() = default;
 
-  // Invokes py_compiler.bind_function(fn_name, fn)
+  // Invokes py_compiler.bind_function
   virtual std::string bind_function(
       PyObject* py_compiler,
       const std::string& fn_name,
@@ -1391,7 +1391,8 @@ struct TORCH_API PyCompilerInterface {
       functional_apply_t fn,
       // NOLINTNEXTLINE(performance-unnecessary-value-param)
       std::vector<at::TypePtr> packed_args_schema,
-      bool is_custom_function = false) {
+      bool is_custom_function = false,
+      bool is_traceable = true) {
     TORCH_INTERNAL_ASSERT(false, "Needs to be overridden");
   }
 
