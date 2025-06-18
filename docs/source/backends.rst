@@ -3,7 +3,7 @@
 
 torch.backends
 ==============
-.. automodule:: torch.backends
+.. py:module:: torch.backends.xeon.run_cpu
 
 `torch.backends` controls the behavior of various backends that PyTorch supports.
 
