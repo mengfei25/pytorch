@@ -1139,6 +1139,7 @@ def configure_extension_build():
     entry_points = {
         "console_scripts": [
             "torchrun = torch.distributed.run:main",
+            "torch-xeon-launcher = torch.backends.xeon.run_cpu:main",
         ],
         "torchrun.logs_specs": [
             "default = torch.distributed.elastic.multiprocessing:DefaultLogsSpecs",
