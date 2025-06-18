@@ -3,7 +3,7 @@
 
 torch.backends
 ==============
-.. py:module:: torch.backends
+.. automodule:: torch.backends
 
 `torch.backends` controls the behavior of various backends that PyTorch supports.
 
@@ -237,4 +237,4 @@ torch.backends.opt_einsum
 torch.backends.xeon
 ^^^^^^^^^^^^^^^^^^^
 .. automodule:: torch.backends.xeon
-.. automodule:: torch.backends.xeon.run_cpu
+.. py:module:: torch.backends.xeon.run_cpu
