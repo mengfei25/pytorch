@@ -403,6 +403,7 @@ class TorchBenchmarkRunner(BenchmarkRunner):
                 or re.search("|".join(args.exclude), model_name, re.IGNORECASE)
                 or model_name in args.exclude_exact
                 or model_name in self.skip_models
+                or 'detectron2' in model_name
             ):
                 continue
 
