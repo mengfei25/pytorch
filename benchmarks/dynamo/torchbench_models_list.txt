@@ -14,4 +14,4 @@ timm_efficientnet
 timm_vision_transformer
 vision_maskrcnn
 yolov3
-timm_regnet
+timm_nfnet
