@@ -23,11 +23,8 @@ from torch.distributed.tensor._tp_conv import (
 )
 from torch.distributed.tensor._utils import try_find_mesh_from_args
 from torch.distributed.tensor.placement_types import Partial, Placement, Replicate
-from torch.utils._debug_mode import DebugMode
-from torch.utils._python_dispatch import (
-    _get_current_dispatch_mode,
-    return_and_correct_aliasing,
-)
+from torch.utils._debug_mode import get_active_debug_mode
+from torch.utils._python_dispatch import return_and_correct_aliasing
 
 
 try:
@@ -192,7 +189,10 @@ class OpDispatcher:
 
             local_tensor_args = (
                 pytree.tree_unflatten(
-                    cast(list[object], op_info.local_args), op_info.args_tree_spec
+                    # pyrefly: ignore  # bad-argument-type
+                    cast(list[object], op_info.local_args),
+                    # pyrefly: ignore  # bad-argument-type
+                    op_info.args_tree_spec,
                 )
                 if op_info.args_tree_spec
                 else op_info.local_args
@@ -338,8 +338,7 @@ class OpDispatcher:
         suggested_input_schema: OpSchema,
         use_val_from_redistribute_schema: bool,
     ) -> None:
-        debug_mode = _get_current_dispatch_mode()
-        in_debug_mode = isinstance(debug_mode, DebugMode)
+        debug_mode = get_active_debug_mode()
 
         # NOTE: it's very rare that we need to reshard kwargs so we intentionally skip it
         if op_info.args_tree_spec is not None:
@@ -359,13 +358,17 @@ class OpDispatcher:
                         debug_mode.record_redistribute_calls(  # type: ignore[union-attr]
                             i, arg_spec, reshard_arg_spec
                         )
-                        if in_debug_mode
+                        if debug_mode is not None
                         else contextlib.nullcontext()
                     )
 
                     with redistribute_context:
                         resharded_local_tensor = redistribute_local_tensor(
-                            local_tensor, arg_spec, reshard_arg_spec
+                            # pyrefly: ignore  # bad-argument-type
+                            local_tensor,
+                            arg_spec,
+                            # pyrefly: ignore  # bad-argument-type
+                            reshard_arg_spec,
                         )
                     new_local_args.append(resharded_local_tensor)
                 else:
@@ -435,7 +438,11 @@ class OpDispatcher:
                     op_call, args_list
                 )
                 kwargs_schema[k] = self._try_replicate_spec_for_scalar_tensor(
-                    op_call, v, compute_mesh
+                    # pyrefly: ignore  # bad-argument-type
+                    op_call,
+                    v,
+                    # pyrefly: ignore  # bad-argument-type
+                    compute_mesh,
                 )
                 local_kwargs[k] = v
             else:
@@ -451,6 +458,7 @@ class OpDispatcher:
             OpSchema(
                 op_call,
                 (
+                    # pyrefly: ignore  # bad-argument-type
                     pytree.tree_unflatten(args_schema, args_spec)
                     if args_spec
                     else tuple(args_schema)
