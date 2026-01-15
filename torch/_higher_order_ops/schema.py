@@ -11,7 +11,7 @@ from torch.fx.node import Target
 # This is helpful for generating FunctionSchema for HigherOrderOperator, where
 # we don't have a function to inspect and each call of the higher order operator
 # would have different schema.
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class HopArgumentInfo:
     # Could give a name to the operand by default it's empty string.
     name: str
@@ -35,7 +35,7 @@ class HopArgumentInfoGen:
         kw_only: bool = False,
     ) -> HopArgumentInfo:
         if default_value is not None:
-            assert type(example_value) == type(default_value), (
+            assert type(example_value) is type(default_value), (
                 f"example_value type {type(example_value)} doesn't match default_value type: {type(default_value)}"
             )
 

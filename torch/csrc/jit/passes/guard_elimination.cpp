@@ -2,9 +2,6 @@
 
 #include <torch/csrc/jit/ir/alias_analysis.h>
 #include <torch/csrc/jit/jit_log.h>
-#include <torch/csrc/jit/passes/constant_propagation.h>
-#include <torch/csrc/jit/passes/peephole.h>
-#include <torch/csrc/jit/runtime/graph_executor.h>
 #include <memory>
 #include <unordered_set>
 
@@ -340,6 +337,8 @@ struct GuardElimination {
       case aten::reciprocal:
       case aten::addcmul:
       case aten::where:
+      case aten::_cast_Float:
+      case aten::_cast_Long:
       case aten::__and__:
       case aten::__or__:
       case aten::__xor__:

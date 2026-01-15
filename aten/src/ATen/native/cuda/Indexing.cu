@@ -517,7 +517,7 @@ class ReduceAdd {
 public:
   template <typename scalar_t>
   constexpr C10_DEVICE void operator() (scalar_t* self_data_start, int64_t index, int64_t numel, const scalar_t * src_data) const {
-#if (defined(__gfx940__) || defined(__gfx941__) || defined(__gfx942__) || defined(__gfx950__))
+#if (defined(__gfx942__) || defined(__gfx950__))
     opportunistic_fastAtomicAdd(self_data_start, index, numel, *src_data);
 #else
     fastAtomicAdd(self_data_start, index, numel, *src_data, true);
@@ -710,6 +710,9 @@ void index_put_with_sort_kernel(Tensor & self, const c10::List<std::optional<Ten
       dim3 block(warp_size, indices_per_block);
 
 #ifdef USE_ROCM
+      dim3 new_grid_many_indices(ceil_div(num_indices, (int64_t) (indices_per_block * warp_size)),
+      grid.y == 1 ? std::min<int>(at::cuda::getCurrentDeviceProperties()->maxGridSize[1], ceil_div(sliceSize, (int64_t) (warp_size))) : grid.y,
+      grid.z);
       dim3 new_grid(ceil_div(num_indices, (int64_t) (indices_per_block * warp_size)), grid.y, grid.z);
       size_t smem_dups_size = indices_per_block * warp_size * sizeof(int64_t);
 #define KERNEL_GRID new_grid
@@ -788,7 +791,7 @@ void index_put_with_sort_kernel(Tensor & self, const c10::List<std::optional<Ten
               expandedValue.scalar_type(),
               "indexing_backward_many_indices",
               AT_WRAP([&] {
-                indexing_backward_kernel_many_indices<scalar_t, UNROLL><<<new_grid, block, smem_dups_size, stream>>>(
+                indexing_backward_kernel_many_indices<scalar_t, UNROLL><<<new_grid_many_indices, block, smem_dups_size, stream>>>(
                   sorted_indices.const_data_ptr<int64_t>(),
                   orig_indices.const_data_ptr<int64_t>(),
                   expandedValue.const_data_ptr<scalar_t>(),
@@ -1608,7 +1611,7 @@ void index_select_out_cuda_impl(
 
   // SmallIndexKernel is more performant when the number of indices is small, and pre-loading
   // the index reduces memory accesses. When the number of indices is large, we avoid that
-  // and increase parallellism by calling gather_out which is a generalization of index_select
+  // and increase parallelism by calling gather_out which is a generalization of index_select
   if (cuda::detail::canUse32BitIndexMath(out) &&
       cuda::detail::canUse32BitIndexMath(self) &&
       cuda::detail::canUse32BitIndexMath(index) &&

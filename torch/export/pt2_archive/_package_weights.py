@@ -25,15 +25,15 @@ class TensorProperties:
 
         if not self.is_fake:
             # only get the storage pointer for real tensors
-            # pyrefly: ignore  # bad-assignment
+            # pyrefly: ignore [bad-assignment]
             self.storage_ptr = tensor.untyped_storage().data_ptr()
             if self.is_contiguous:
                 # only get storage size and start/end pointers for contiguous tensors
-                # pyrefly: ignore  # bad-assignment
+                # pyrefly: ignore [bad-assignment]
                 self.storage_size = tensor.untyped_storage().nbytes()
-                # pyrefly: ignore  # bad-assignment
+                # pyrefly: ignore [bad-assignment]
                 self.start = tensor.data_ptr()
-                # pyrefly: ignore  # bad-assignment
+                # pyrefly: ignore [bad-assignment]
                 self.end = _end_ptr(tensor)
 
         # info to recover tensor
@@ -52,10 +52,14 @@ class TensorProperties:
         if not self.is_contiguous:
             return False
 
-        assert self.storage_ptr is not None
-        assert self.storage_size is not None
-        assert self.start is not None
-        assert self.end is not None
+        if self.storage_ptr is None:
+            raise AssertionError("storage_ptr cannot be None for complete check")
+        if self.storage_size is None:
+            raise AssertionError("storage_size cannot be None for complete check")
+        if self.start is None:
+            raise AssertionError("start cannot be None for complete check")
+        if self.end is None:
+            raise AssertionError("end cannot be None for complete check")
         return (
             self.start == self.storage_ptr
             and self.end == self.storage_ptr + self.storage_size
@@ -108,9 +112,11 @@ def get_complete(
 
     warnings.warn(
         "No complete tensor found in the group! Returning the first one. "
-        "This may cause issues when your weights are not on CPU."
+        "This may cause issues when your weights are not on CPU.",
+        stacklevel=2,
     )
-    assert len(group) > 0
+    if len(group) == 0:
+        raise AssertionError("group cannot be empty")
     return next(iter(group))
 
 
@@ -121,12 +127,14 @@ def group_weights(all_weights: dict[str, Weights]) -> list[OrderedSet[tuple[str,
     Returns a list of sets, each set contains a tuple of (model_name, weight_name).
     """
 
-    weights_dict: dict[int, OrderedSet[tuple[str, str]]] = collections.defaultdict(
-        OrderedSet
-    )  # storage_key -> set(weight)
+    weights_dict: dict[tuple[int, torch.dtype], OrderedSet[tuple[str, str]]] = (
+        collections.defaultdict(OrderedSet)
+    )  # (storage_key, dtype) -> set(weight)
 
     for model_name, weights in all_weights.items():
-        for weight_name, (_, properties) in weights.items():
-            weights_dict[properties.storage_ptr].add((model_name, weight_name))
+        for weight_name, (tensor, properties) in weights.items():
+            weights_dict[(properties.storage_ptr, tensor.dtype)].add(
+                (model_name, weight_name)
+            )
 
     return list(weights_dict.values())

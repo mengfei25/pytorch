@@ -1,9 +1,4 @@
-#include <torch/csrc/jit/frontend/ir_emitter.h>
-#include <torch/csrc/jit/jit_log.h>
-#include <torch/csrc/jit/passes/inliner.h>
-#include <torch/csrc/jit/runtime/operator.h>
 #include <torch/csrc/jit/runtime/symbolic_shape_registry_util.h>
-#include <unordered_map>
 
 namespace torch::jit {
 
@@ -11,6 +6,7 @@ const OperatorMap<std::string>& get_tensorexpr_elementwise_set() {
   // clang-format off
  static const OperatorMap<std::string> tensorexpr_elementwise_set{
       {"aten::add.Scalar(Tensor self, Scalar other, Scalar alpha=1) -> Tensor", "unary"},
+      {"aten::_cast_Float(Tensor self, bool non_blocking) -> Tensor", "unary"},
       {"aten::sub.Scalar(Tensor self, Scalar other, Scalar alpha=1) -> Tensor", "unary"},
       {"aten::mul.Scalar(Tensor self, Scalar other) -> Tensor", "unary"},
       {"aten::div.Scalar(Tensor self, Scalar other) -> Tensor", "unary"},

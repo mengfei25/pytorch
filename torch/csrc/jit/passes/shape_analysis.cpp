@@ -11,9 +11,6 @@
 #include <torch/csrc/jit/runtime/exception_message.h>
 #include <torch/csrc/jit/runtime/operator.h>
 
-#include <torch/csrc/autograd/variable.h>
-
-#include <ATen/DeviceGuard.h>
 #include <ATen/ExpandUtils.h>
 #include <ATen/core/symbol.h>
 
@@ -60,7 +57,7 @@ void PropertyPropBase::propagateBlock(Block* block, bool insert_expands) {
   for (Node* node : block->nodes()) {
     try {
       propagateNode(node, insert_expands);
-    } catch (propagation_error& e) {
+    } catch (propagation_error&) {
       setUnshapedType(node);
     } catch (std::exception& e) {
       throw(
@@ -1464,9 +1461,15 @@ class ShapePropagator : public PropertyPropBase {
             "aten::full_like(Tensor self, Scalar fill_value, *, int? dtype=None, int? layout=None, Device? device=None, bool? pin_memory=None, MemoryFormat? memory_format=None) -> Tensor",
             "aten::ones_like(Tensor self, *, int? dtype=None, int? layout=None, Device? device=None, bool? pin_memory=None, MemoryFormat? memory_format=None) -> Tensor",
             "aten::rand_like(Tensor self, *, int? dtype=None, int? layout=None, Device? device=None, bool? pin_memory=None, MemoryFormat? memory_format=None) -> Tensor",
+            "aten::rand_like.generator(Tensor self, *, Generator? generator, int? dtype=None, int? layout=None, Device? device=None, bool? pin_memory=None, MemoryFormat? memory_format=None) -> Tensor",
             "aten::randint_like(Tensor self, int high, *, int? dtype=None, int? layout=None, Device? device=None, bool? pin_memory=None, MemoryFormat? memory_format=None) -> Tensor",
-            "aten::randint_like(Tensor self, int low, int high, *, int? dtype=None, int? layout=None, Device? device=None, bool? pin_memory=None, MemoryFormat? memory_format=None) -> Tensor",
+            "aten::randint_like.generator(Tensor self, int high, *, Generator? generator, int? dtype=None, int? layout=None, Device? device=None, bool? pin_memory=None, MemoryFormat? memory_format=None) -> Tensor",
+            "aten::randint_like.Tensor(Tensor self, Tensor high, *, int? dtype=None, int? layout=None, Device? device=None, bool? pin_memory=None, MemoryFormat? memory_format=None) -> Tensor",
+            "aten::randint_like.Tensor_generator(Tensor self, Tensor high, *, Generator? generator, int? dtype=None, int? layout=None, Device? device=None, bool? pin_memory=None, MemoryFormat? memory_format=None) -> Tensor",
+            "aten::randint_like.low_dtype(Tensor self, int low, int high, *, int? dtype=None, int? layout=None, Device? device=None, bool? pin_memory=None, MemoryFormat? memory_format=None) -> Tensor",
+            "aten::randint_like.low_generator_dtype(Tensor self, int low, int high, *, Generator? generator, int? dtype=None, int? layout=None, Device? device=None, bool? pin_memory=None, MemoryFormat? memory_format=None) -> Tensor",
             "aten::randn_like(Tensor self, *, int? dtype=None, int? layout=None, Device? device=None, bool? pin_memory=None, MemoryFormat? memory_format=None) -> Tensor",
+            "aten::randn_like.generator(Tensor self, *, Generator? generator, int? dtype=None, int? layout=None, Device? device=None, bool? pin_memory=None, MemoryFormat? memory_format=None) -> Tensor",
             "aten::zeros_like(Tensor self, *, int? dtype=None, int? layout=None, Device? device=None, bool? pin_memory=None, MemoryFormat? memory_format=None) -> Tensor",
         },
         [](Node* node) -> type_vec_t {
@@ -1513,6 +1516,50 @@ class ShapePropagator : public PropertyPropBase {
         [](Node* node) -> type_vec_t {
           if (auto maybe_size = node->get<c10::List<int64_t>>(attr::size)) {
             return factory_with_ndim(node, (int)maybe_size->size(), at::kLong);
+          }
+          return {};
+        }};
+
+    static const auto get_cast_scalar_type = [](Node* node) -> at::ScalarType {
+      switch (node->kind()) {
+        case aten::_cast_Byte:
+          return at::kByte;
+        case aten::_cast_Char:
+          return at::kChar;
+        case aten::_cast_Double:
+          return at::kDouble;
+        case aten::_cast_Float:
+          return at::kFloat;
+        case aten::_cast_Half:
+          return at::kHalf;
+        case aten::_cast_Int:
+          return at::kInt;
+        case aten::_cast_Long:
+          return at::kLong;
+        case aten::_cast_Short:
+          return at::kShort;
+        default:
+          TORCH_INTERNAL_ASSERT(
+              false,
+              "unknown node kind in get_cast_scalar_type: ",
+              node->kind().toQualString());
+      }
+    };
+    static const register_formula_for cast_ops{
+        {
+            "aten::_cast_Byte(Tensor self, bool non_blocking) -> Tensor",
+            "aten::_cast_Char(Tensor self, bool non_blocking) -> Tensor",
+            "aten::_cast_Double(Tensor self, bool non_blocking) -> Tensor",
+            "aten::_cast_Float(Tensor self, bool non_blocking) -> Tensor",
+            "aten::_cast_Half(Tensor self, bool non_blocking) -> Tensor",
+            "aten::_cast_Int(Tensor self, bool non_blocking) -> Tensor",
+            "aten::_cast_Long(Tensor self, bool non_blocking) -> Tensor",
+            "aten::_cast_Short(Tensor self, bool non_blocking) -> Tensor",
+        },
+        [](Node* node) -> type_vec_t {
+          if (auto type =
+                  node->namedInput(attr::self)->type()->cast<TensorType>()) {
+            return {type->withScalarType(get_cast_scalar_type(node))};
           }
           return {};
         }};
@@ -1862,7 +1909,7 @@ class ShapePropagator : public PropertyPropBase {
             "aten::sub(Tensor self, Scalar other, Scalar alpha) -> Tensor") ||
         node->matches("aten::div(Tensor self, Scalar other) -> Tensor") ||
         node->matches("aten::mul(Tensor self, Scalar other) -> Tensor")) {
-      auto first_scalar_type = (tensor_types)[0]->scalarType();
+      auto first_scalar_type = tensor_types[0]->scalarType();
       auto second_scalar_type =
           tryScalarTypeFromJitType(*node->inputs()[1]->type());
       if (!first_scalar_type || !second_scalar_type) {

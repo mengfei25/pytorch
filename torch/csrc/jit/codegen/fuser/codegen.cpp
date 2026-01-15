@@ -1,11 +1,8 @@
 #include <torch/csrc/jit/codegen/fuser/codegen.h>
 
-#include <ATen/ATen.h>
 #include <ATen/code_template.h>
 #include <c10/util/Exception.h>
 #include <torch/csrc/jit/codegen/fuser/compiler.h>
-#include <torch/csrc/jit/codegen/fuser/interface.h>
-#include <torch/csrc/jit/codegen/fuser/tensor_info.h>
 #include <torch/csrc/jit/ir/ir.h>
 
 #include <torch/csrc/jit/codegen/fuser/cpu/resource_strings.h>
@@ -15,7 +12,6 @@
 #include <cstdint>
 #include <iostream>
 #include <sstream>
-#include <tuple>
 #include <vector>
 
 namespace torch::jit::fuser {
@@ -181,6 +177,7 @@ struct RHSTemplate {
 static std::string encodeRHS(const Node* n) {
   static std::unordered_map<NodeKind, RHSTemplate> simple_map_ops = {
       // unary
+      {aten::_cast_Float, "static_cast<float>(${0})"},
       {aten::abs, "fabs(${0})"},
       {aten::sigmoid, {"1.f / (1.f + expf(-${0}))", "1. / (1. + exp(-${0}))"}},
       {aten::relu, "${0} < 0 ? 0.f : ${0} "},
