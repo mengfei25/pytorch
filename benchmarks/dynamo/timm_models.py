@@ -200,7 +200,15 @@ class TimmRunner(BenchmarkRunner):
 
     @property
     def guard_on_nn_module_models(self):
-        return {}
+        return {
+            "convit_base",
+        }
+
+    @property
+    def inline_inbuilt_nn_modules_models(self):
+        return {
+            "lcnet_050",
+        }
 
     @download_retry_decorator
     def _download_model(self, model_name):
