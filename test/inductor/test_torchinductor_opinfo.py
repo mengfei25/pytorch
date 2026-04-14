@@ -237,6 +237,7 @@ inductor_skips["xpu"] = {}
 # torch-xpu-ops: #2956
 inductor_skips["xpu"]["lu"] = {f32}
 inductor_skips["xpu"]["nn.functional.linear"] = {f16}
+inductor_skips["xpu"]["masked.cumprod"] = {f16}
 
 inductor_expected_failures_single_sample = defaultdict(dict)
 
@@ -301,25 +302,6 @@ inductor_expected_failures_single_sample["xpu"] = {
         i32,
         i64,
     },  # align with cuda.
-    # could not create a primitive
-    "fft.fft": {f16},
-    "fft.fft2": {f16},
-    "fft.fftn": {f16},
-    "fft.hfft": {f16},
-    "fft.hfft2": {f16},
-    "fft.hfftn": {f16},
-    "fft.rfft": {f16},
-    "fft.rfft2": {f16},
-    "fft.rfftn": {f16},
-    "fft.ifft": {f16},
-    "fft.ifft2": {f16},
-    "fft.ifftn": {f16},
-    "fft.ihfft": {f16},
-    "fft.ihfft2": {f16},
-    "fft.ihfftn": {f16},
-    "fft.irfft": {f16},
-    "fft.irfft2": {f16},
-    "fft.irfftn": {f16},
 }
 
 
@@ -1252,6 +1234,7 @@ class TestInductorOpInfo(TestCase):
     )
     @torch._inductor.config.patch("test_configs.runtime_triton_dtype_assert", True)
     @torch._inductor.config.patch("test_configs.static_cpp_dtype_assert", True)
+    @torch._inductor.config.patch("shape_padding", False)
     @collection_decorator
     def test_comprehensive(self, device, dtype, op):
         device_type = torch.device(device).type

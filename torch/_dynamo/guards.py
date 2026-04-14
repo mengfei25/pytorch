@@ -1099,6 +1099,16 @@ def check_closure(value: Any, metadata: Any) -> bool:
     return id(value) == metadata
 
 
+def _constant_subclass_base_value(value: Any) -> Any:
+    """Extract the base constant value from a constant subclass instance."""
+    from .variables.user_defined import _CONSTANT_BASE_TYPES
+
+    for t in _CONSTANT_BASE_TYPES:
+        if isinstance(value, t):
+            return t(value)  # pyrefly: ignore[bad-argument-type]
+    raise TypeError(f"Not a constant subclass: {type(value)}")
+
+
 def register_guard_check_spec(
     get_metadata_fn,
     eval_fn,
@@ -2639,6 +2649,42 @@ class GuardBuilder(GuardBuilderBase):
             self.EQUALS_MATCH(guard)
 
     @register_guard_check_spec(
+        get_metadata_fn=lambda guard, value: _constant_subclass_base_value(value),
+        eval_fn=lambda value, metadata: _constant_subclass_base_value(value)
+        == metadata,
+    )
+    def CONSTANT_SUBCLASS_MATCH(self, guard: Guard) -> None:
+        """Guard for subclasses of constant types (int, float, str, etc.).
+
+        Extracts the base value using the base type's converter (e.g.,
+        int.__int__) to avoid calling user-overridden __eq__.
+        """
+        from .variables.user_defined import _CONSTANT_BASE_TYPES
+
+        val = self.get(guard)
+        ref = self.arg_ref(guard)
+
+        # Find the constant base type
+        base_type = None
+        for t in _CONSTANT_BASE_TYPES:
+            if isinstance(val, t):
+                base_type = t
+                break
+        assert base_type is not None
+
+        base_value = base_type(val)
+        code = [f"{base_type.__name__}({ref}) == {base_value!r}"]
+
+        def check_fn(x: Any) -> bool:
+            return base_type(x) == base_value
+
+        self.get_guard_manager(guard).add_lambda_guard(
+            check_fn,
+            get_verbose_code_parts(code, guard),
+            guard.user_stack,
+        )
+
+    @register_guard_check_spec(
         get_metadata_fn=lambda guard, value: value,
         eval_fn=lambda value, metadata: value is metadata,
     )
@@ -3779,12 +3825,9 @@ class GuardsStatePickler(pickle.Pickler):
         pytype: type,
         dispatch_keys_raw: int,
         ctx: Any,
-        inner_data: list[tuple[str, Callable[..., Any], tuple[Any, ...]]],
+        inner_data: list[tuple[str, Any]],
     ) -> torch.Tensor:
-        # Unpickle the inner tensor components. These could also be subclass instances.
-        inner_tensors = {}
-        for attr, unpickle_func, unpickle_func_args in inner_data:
-            inner_tensors[attr] = unpickle_func(*unpickle_func_args)
+        inner_tensors = dict(inner_data)
 
         outer_size, outer_stride = meta_tensor.shape, meta_tensor.stride()
         out = type(meta_tensor).__tensor_unflatten__(  # type: ignore[attr-defined]
@@ -3923,8 +3966,7 @@ class GuardsStatePickler(pickle.Pickler):
                     inner = getattr(obj, attr)
                     if isinstance(inner, torch.Tensor):
                         self.guard_tree_values[id(inner)] = inner
-                    func, args_tuple = self.reducer_override(inner)
-                    inner_data.append((attr, func, args_tuple))
+                    inner_data.append((attr, inner))
 
                 return type(self)._unpickle_traceable_wrapper_subclass, (
                     torch.empty_like(obj, device="meta"),

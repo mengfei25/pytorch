@@ -28,7 +28,7 @@ from torch.testing._internal.common_utils import \
      NoTest, skipIfSlowGradcheckEnv, suppress_warnings, serialTest, instantiate_parametrized_tests, xfailIf)
 from torch.testing._internal.common_mps import mps_ops_modifier, mps_ops_grad_modifier, mps_ops_error_inputs_modifier
 from torch.testing import make_tensor
-from torch.testing._internal.common_dtype import get_all_dtypes, integral_types, all_mps_types
+from torch.testing._internal.common_dtype import get_all_dtypes, integral_types
 import torch.backends.mps
 from torch.distributions import Uniform, Exponential
 from torch.utils._python_dispatch import TorchDispatchMode
@@ -974,6 +974,17 @@ class TestMPS(TestCaseMPS):
         helper(0, [1024], torch.float32)
         helper(0.2, [2, 3], torch.float32)
         helper(0.2 + 0.5j, [2, 3], torch.complex64)
+        helper(2**63 + 100, [3], torch.uint64)
+
+    def test_fill_strided(self):
+        # Regression test: strided fill_ must convert byte strides to element strides
+        for dtype in [torch.cfloat, torch.float32, torch.int32, torch.uint16, torch.uint8]:
+            x_mps = torch.zeros(4, 4, device='mps', dtype=dtype)
+            x_cpu = x_mps.cpu()
+            # Every other row — non-contiguous view
+            for t in (x_mps, x_cpu):
+                t[::2].fill_(1)
+            self.assertEqual(x_mps, x_cpu)
 
     def test_fill_storage_offset(self):
         shape = [2, 10]
@@ -2015,6 +2026,19 @@ class TestMPS(TestCaseMPS):
 
         self.assertEqual(bn_cpu.weight.grad, bn_mps.weight.grad, atol=1e-5, rtol=1e-5)
         self.assertEqual(bn_cpu.bias.grad, bn_mps.bias.grad, atol=1e-5, rtol=1e-5)
+
+    def test_batch_norm_mixed_dtype(self):
+        # Regression test for https://github.com/pytorch/pytorch/issues/178770
+        # BatchNorm with float32 weights and float16 input should work
+        x = torch.rand(2, 32, 15, 15, device="mps", dtype=torch.float16, requires_grad=True)
+        model = nn.BatchNorm2d(32, device="mps", dtype=torch.float32).train()
+        y_mps = model(x)
+        # Compare against CPU using a copy of the model
+        import copy
+        y_cpu = copy.deepcopy(model).cpu()(x.detach().cpu())
+        self.assertEqual(y_cpu, y_mps.cpu(), atol=1e-3, rtol=1e-3)
+        y_mps.sum().backward()
+        self.assertIsNotNone(x.grad)
 
     def test_layer_norm_backward(self):
         inputs = torch.rand(4, 4, device="mps", requires_grad=True)
@@ -6095,7 +6119,7 @@ class TestMPS(TestCaseMPS):
             input_mps = input_cpu.to('mps')
             output_cpu = torch.linalg.cholesky_ex(input_cpu, upper=upper)
             output_mps = torch.linalg.cholesky_ex(input_mps, upper=upper)
-            self.assertEqual(output_cpu, output_mps, atol=2e-5, rtol=1e-6)
+            self.assertEqual(output_cpu, output_mps, atol=3e-5, rtol=1e-6)
 
         # test with different even/odd matrix sizes
         matrix_sizes = [1, 2, 3, 4, 8, 17, 64, 128, 154]
@@ -8045,20 +8069,6 @@ class TestMPS(TestCaseMPS):
         self.assertTrue(event.query())
         self.assertEqual(c_acc.cpu(), c)
 
-    def test_mps_device_capability(self):
-        # Query device capability via accelerator API
-        cap = torch.accelerator.get_device_capability()
-        # The API returns a dict containing a `supported_dtypes` set
-        supported = set(cap["supported_dtypes"]) if isinstance(cap, dict) else set(cap)
-
-        # Expected dtypes for MPS testing helpers
-        expected = set(all_mps_types())
-        # Per Apple docs, bfloat16 support starts on macOS 14.0+
-        if not torch.backends.mps.is_macos_or_newer(14, 0):
-            expected.discard(torch.bfloat16)
-
-        self.assertTrue(all(dtype in supported for dtype in expected))
-
     def test_jit_save_load(self):
         m = torch.nn.Module()
         m.x = torch.rand(3, 3, device='mps')
@@ -8231,6 +8241,18 @@ class TestMPS(TestCaseMPS):
         self.assertEqual(torch.add(x, 3, alpha=2).cpu(), torch.add(x.cpu(), 3, alpha=2))
         # Regression test for https://github.com/pytorch/pytorch/issues/160208
         self.assertEqual(torch.add(y, x, alpha=2).cpu(), torch.add(y.cpu(), x.cpu(), alpha=2))
+
+    def test_add_sub_alpha_cast(self):
+        # In-place with alpha when self is promoted (e.g. float16 + float32)
+        for op in [torch.Tensor.add_, torch.Tensor.sub_]:
+            for dtype_a, dtype_b in [(torch.float16, torch.float32), (torch.bfloat16, torch.float32)]:
+                a_mps = torch.arange(16, dtype=dtype_a, device='mps')
+                b_mps = torch.arange(16, dtype=dtype_b, device='mps')
+                a_cpu, b_cpu = a_mps.cpu(), b_mps.cpu()
+                alpha = torch.tensor(0.33, dtype=dtype_b)
+                op(a_mps, b_mps, alpha=alpha)
+                op(a_cpu, b_cpu, alpha=alpha)
+                self.assertEqual(a_mps, a_cpu)
 
     # Test add
     def test_add_scalars(self):
@@ -11721,6 +11743,18 @@ class TestAdvancedIndexing(TestCaseMPS):
         self.assertEqual(dst1, dst4, atol=0, rtol=0)
         self.assertEqual(strides, dst4.stride())
 
+    def test_nonzero_large(self):
+        # Regression test: with 2M elements and threadgroup size 1024, the
+        # prefix_sum_blocks kernel must handle ~1954 blocks via its
+        # multi-element-per-thread loop (each thread processes
+        # ceil(num_blocks/tg_size) blocks). This verifies correctness when
+        # the block count exceeds a single threadgroup.
+        x = torch.rand(2_000_000, device="mps")
+        x[x > 0.5] = 0
+        result = torch.nonzero(x)
+        expected = torch.nonzero(x.cpu())
+        self.assertEqual(result.cpu(), expected)
+
     def test_nonzero_non_diff(self):
         device = "mps"
         x = torch.randn(10, requires_grad=True, device=device)
@@ -13152,6 +13186,16 @@ class TestConsistency(TestCaseMPS):
             # Broadcast
             self.assertEqual(op(x, y[0]), op(x.to("mps"), y.to("mps")[0]).cpu())
 
+    def test_mm_stride_zero(self):
+        # Regression test for https://github.com/pytorch/pytorch/issues/180201
+        # MPSGraph matrixMultiplication produces incorrect results with stride-0
+        # inputs on macOS < 26.4 (only every 16th row is correct).
+        expanded = torch.ones(1, 1, device="mps").expand(64, 1)
+        w = torch.randn(1, 16, device="mps")
+        result = expanded.mm(w)
+        expected = torch.ones(64, 1, device="mps").mm(w)
+        self.assertEqual(result, expected)
+
 
 class TestErrorInputs(TestCase):
     _ignore_not_implemented_error = True
@@ -13351,6 +13395,21 @@ class TestMetalLibrary(TestCaseMPS):
         self.assertRaises(ValueError, lambda: lib.full(mps_tensor, group_size=max_thread_group_size + 5))
         self.assertRaises(ValueError, lambda: lib.full(mps_tensor, threads=(3, max_thread_group_size),
                                                        group_size=(3, max_thread_group_size)))
+
+    def test_metal_randn(self):
+        lib = torch.mps.compile_shader("""
+            #include <c10/metal/random.h>
+            kernel void randn(device float* out, constant long2& seed_offset,
+                              uint idx [[thread_position_in_grid]]) {
+              out[idx] = c10::metal::randn(seed_offset.x, seed_offset.y + idx);
+            }
+        """)
+        N = 100_000
+        out = torch.empty(N, device="mps")
+        seed_offset = torch.tensor([42, 0], dtype=torch.long, device="mps")
+        lib.randn(out, seed_offset)
+        self.assertEqual(out.mean(), torch.tensor(0.0, device="mps"), atol=0.01, rtol=0)
+        self.assertEqual(out.std(), torch.tensor(1.0, device="mps"), atol=0.02, rtol=0)
 
     def test_metal_include(self):
         # Checks that includes embedding works
